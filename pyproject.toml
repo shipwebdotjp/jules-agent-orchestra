@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jules-agent"
+version = "0.1.0"
+description = "Decompose a task with Codex and dispatch the subtasks to Jules."
+requires-python = ">=3.12"
+
+[project.scripts]
+jules-agent = "jules_agent.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
