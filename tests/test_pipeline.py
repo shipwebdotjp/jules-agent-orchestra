@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import tempfile
@@ -14,6 +13,8 @@ from jules_agent.pipeline import (
     codex_schema,
     decompose_task,
     dispatch_subtasks,
+    PipelineError,
+    normalize_plan,
     normalize_subtasks,
     parse_json_document,
     run_pipeline,
@@ -21,28 +22,27 @@ from jules_agent.pipeline import (
 from jules_agent.models import Subtask
 
 
-class FakeRunner:
-    def __init__(self, responses: list[subprocess.CompletedProcess[str]]):
-        self.responses = responses
-        self.calls: list[list[str]] = []
-
-    def __call__(self, args, *, cwd=None, input_text=None):
-        self.calls.append(list(args))
-        if not self.responses:
-            raise AssertionError("Unexpected command call.")
-        return self.responses.pop(0)
-
-
 class PipelineTests(unittest.TestCase):
     def test_parse_json_document_accepts_code_fences(self) -> None:
         payload = parse_json_document(
             """```json
-            {"subtasks":[{"title":"First"}]}
+            {"strategy":"single_session","tasks":[{"title":"First"}]}
             ```"""
         )
-        self.assertEqual(payload["subtasks"][0]["title"], "First")
+        self.assertEqual(payload["tasks"][0]["title"], "First")
 
-    def test_normalize_subtasks_accepts_objects_and_strings(self) -> None:
+    def test_normalize_plan_accepts_objects_and_strings(self) -> None:
+        plan = normalize_plan(
+            {
+                "strategy": "single_session",
+                "tasks": [{"title": "Alpha", "details": "Do the first thing."}],
+            }
+        )
+        self.assertEqual(plan.strategy, "single_session")
+        self.assertEqual(plan.tasks[0].title, "Alpha")
+        self.assertEqual(plan.tasks[0].details, "Do the first thing.")
+
+    def test_normalize_subtasks_accepts_legacy_payloads(self) -> None:
         subtasks = normalize_subtasks(
             {
                 "subtasks": [
@@ -59,15 +59,19 @@ class PipelineTests(unittest.TestCase):
         schema = codex_schema()
         self.assertFalse(schema["additionalProperties"])
         self.assertEqual(
-            schema["properties"]["subtasks"]["items"]["required"],
+            set(schema["properties"]["strategy"]["enum"]),
+            {"single_session", "parallel_subtasks", "sequential_subtasks"},
+        )
+        self.assertEqual(
+            schema["properties"]["tasks"]["items"]["required"],
             ["title"],
         )
         self.assertFalse(
-            schema["properties"]["subtasks"]["items"]["additionalProperties"]
+            schema["properties"]["tasks"]["items"]["additionalProperties"]
         )
         self.assertEqual(
-            set(schema["properties"]["subtasks"]["items"]["properties"].keys()),
-            {"title"},
+            set(schema["properties"]["tasks"]["items"]["properties"].keys()),
+            {"title", "details", "description", "body"},
         )
 
     def test_decompose_task_invokes_codex(self) -> None:
@@ -86,18 +90,19 @@ class PipelineTests(unittest.TestCase):
                 if "--output-last-message" in args:
                     last_message_path = Path(args[args.index("--output-last-message") + 1])
                     last_message_path.write_text(
-                        '{"subtasks":[{"title":"Plan"},{"title":"Implement"}]}',
+                        '{"strategy":"parallel_subtasks","tasks":[{"title":"Plan"},{"title":"Implement"}]}',
                         encoding="utf-8",
                     )
                 return responses.pop(0)
 
-            subtasks = decompose_task(
+            plan = decompose_task(
                 "build a cli",
                 cwd=cwd,
                 runner=runner,
             )
 
-        self.assertEqual([subtask.title for subtask in subtasks], ["Plan", "Implement"])
+        self.assertEqual(plan.strategy, "parallel_subtasks")
+        self.assertEqual([task.title for task in plan.tasks], ["Plan", "Implement"])
 
     def test_dispatch_subtasks_invokes_api(self) -> None:
         client = MagicMock()
@@ -121,12 +126,16 @@ class PipelineTests(unittest.TestCase):
                 subtasks,
                 cwd=cwd,
                 client=client,
+                strategy="parallel_subtasks",
             )
 
             self.assertEqual(len(results), 2)
             self.assertEqual(results[0].session_id, "s1")
             self.assertEqual(results[1].session_id, "s2")
             self.assertEqual(client.create_session.call_count, 2)
+            self.assertTrue(
+                client.create_session.call_args_list[0].kwargs["require_plan_approval"]
+            )
 
     def test_run_pipeline_uses_api(self) -> None:
         client = MagicMock()
@@ -147,7 +156,7 @@ class PipelineTests(unittest.TestCase):
         def runner(args, *, cwd=None, input_text=None):
             if "--output-last-message" in args:
                 Path(args[args.index("--output-last-message") + 1]).write_text(
-                    '{"subtasks":[{"title":"One"}]}',
+                    '{"strategy":"single_session","tasks":[{"title":"One"}]}',
                     encoding="utf-8",
                 )
             return responses.pop(0)
@@ -166,7 +175,40 @@ class PipelineTests(unittest.TestCase):
             )
 
         self.assertEqual(len(outcome.dispatches), 1)
+        self.assertEqual(outcome.plan.strategy, "single_session")
+        self.assertEqual([task.title for task in outcome.subtasks], ["One"])
         self.assertEqual(outcome.dispatches[0].session_id, "s1")
+
+    def test_run_pipeline_rejects_sequential_strategy(self) -> None:
+        client = MagicMock()
+        responses = [
+            subprocess.CompletedProcess(
+                args=["codex"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+        ]
+
+        def runner(args, *, cwd=None, input_text=None):
+            if "--output-last-message" in args:
+                Path(args[args.index("--output-last-message") + 1]).write_text(
+                    '{"strategy":"sequential_subtasks","tasks":[{"title":"One"}]}',
+                    encoding="utf-8",
+                )
+            return responses.pop(0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = Path(tmpdir)
+            with self.assertRaises(PipelineError) as excinfo:
+                run_pipeline(
+                    "task",
+                    cwd=cwd,
+                    client=client,
+                    runner=runner,
+                )
+
+        self.assertIn("sequential_subtasks", str(excinfo.exception))
 
 
 if __name__ == "__main__":

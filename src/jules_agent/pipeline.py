@@ -6,13 +6,19 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Sequence
 
 from .client import JulesAPIError, JulesClient
-from .models import DispatchResult, Subtask
+from .models import DispatchResult, ExecutionPlan, Subtask
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
+
+SUPPORTED_STRATEGIES = {
+    "single_session",
+    "parallel_subtasks",
+    "sequential_subtasks",
+}
 
 
 class PipelineError(RuntimeError):
@@ -95,12 +101,14 @@ def get_git_remote_repo(cwd: Path) -> tuple[str, str] | None:
 
 def build_codex_prompt(task: str) -> str:
     return (
-        "Break the task into a JSON object matching the supplied schema.\n"
-        "Each subtask must correspond to a single, self-contained pull request:\n"
-        "  - independently reviewable and mergeable\n"
-        "  - scoped to one logical change (e.g. one feature, one refactor, one fix)\n"
-        "  - ordered so each builds on the previous without circular dependencies\n"
-        "Return only JSON. Keep subtask descriptions concise and actionable.\n\n"
+        "Analyze the task and return a JSON object matching the supplied schema.\n"
+        "Choose exactly one strategy:\n"
+        "  - single_session: one cohesive Jules session; use this for a small change that should be handled together\n"
+        "  - parallel_subtasks: multiple independent tasks that can be dispatched concurrently\n"
+        "  - sequential_subtasks: tasks that depend on each other; this mode is currently rejected by the CLI\n"
+        "For single_session, return exactly one task.\n"
+        "For parallel_subtasks, return only tasks that do not overlap in responsibility.\n"
+        "Return only JSON.\n\n"
         f"Task:\n{task.strip()}"
     )
 
@@ -110,7 +118,11 @@ def codex_schema() -> dict[str, object]:
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "subtasks": {
+            "strategy": {
+                "type": "string",
+                "enum": sorted(SUPPORTED_STRATEGIES),
+            },
+            "tasks": {
                 "type": "array",
                 "minItems": 1,
                 "items": {
@@ -118,12 +130,15 @@ def codex_schema() -> dict[str, object]:
                     "additionalProperties": False,
                     "properties": {
                         "title": {"type": "string", "minLength": 1},
+                        "details": {"type": "string"},
+                        "description": {"type": "string"},
+                        "body": {"type": "string"},
                     },
                     "required": ["title"],
                 },
             }
         },
-        "required": ["subtasks"],
+        "required": ["strategy", "tasks"],
     }
 
 
@@ -152,15 +167,50 @@ def parse_json_document(text: str) -> object:
 
 def normalize_subtasks(payload: object) -> list[Subtask]:
     if isinstance(payload, dict):
-        raw_items = payload.get("subtasks")
+        raw_items = payload.get("tasks")
         if raw_items is None:
-            raise PipelineError("Codex output did not include a 'subtasks' field.")
+            raw_items = payload.get("subtasks")
+        if raw_items is None:
+            raise PipelineError("Codex output did not include a 'tasks' field.")
     elif isinstance(payload, list):
         raw_items = payload
     else:
         raise PipelineError("Codex output must be a JSON object or array.")
 
-    subtasks: list[Subtask] = []
+    return _normalize_tasks(raw_items)
+
+
+def normalize_plan(payload: object) -> ExecutionPlan:
+    if not isinstance(payload, dict):
+        raise PipelineError("Codex output must be a JSON object.")
+
+    raw_strategy = payload.get("strategy")
+    if not isinstance(raw_strategy, str) or not raw_strategy.strip():
+        raise PipelineError("Codex output did not include a valid 'strategy' field.")
+    strategy = raw_strategy.strip()
+    if strategy not in SUPPORTED_STRATEGIES:
+        raise PipelineError(f"Codex returned unsupported strategy: {strategy}")
+
+    raw_items = payload.get("tasks")
+    if raw_items is None:
+        raw_items = payload.get("subtasks")
+    if raw_items is None:
+        raise PipelineError("Codex output did not include a 'tasks' field.")
+
+    tasks = _normalize_tasks(raw_items)
+    if strategy == "single_session" and len(tasks) != 1:
+        raise PipelineError(
+            "Codex returned a single_session plan with more than one task."
+        )
+
+    return ExecutionPlan(strategy=strategy, tasks=tasks)
+
+
+def _normalize_tasks(raw_items: object) -> list[Subtask]:
+    if not isinstance(raw_items, list):
+        raise PipelineError("Codex output field 'tasks' must be an array.")
+
+    tasks: list[Subtask] = []
     for index, item in enumerate(raw_items, start=1):
         if isinstance(item, str):
             title = item.strip()
@@ -178,17 +228,24 @@ def normalize_subtasks(payload: object) -> list[Subtask]:
                 item.get("body"),
             )
         else:
-            raise PipelineError(f"Subtask {index} is not a string or object.")
+            raise PipelineError(f"Task {index} is not a string or object.")
 
         if not title:
-            raise PipelineError(f"Subtask {index} is missing a title.")
+            raise PipelineError(f"Task {index} is missing a title.")
 
-        subtasks.append(Subtask(title=title, details=details))
+        tasks.append(Subtask(title=title, details=details))
 
-    if not subtasks:
-        raise PipelineError("Codex returned zero subtasks.")
+    if not tasks:
+        raise PipelineError("Codex returned zero tasks.")
 
-    return subtasks
+    return tasks
+
+
+def validate_plan(plan: ExecutionPlan) -> None:
+    if plan.strategy == "sequential_subtasks":
+        raise PipelineError(
+            "Codex selected sequential_subtasks, which this CLI does not support yet."
+        )
 
 
 def _first_non_empty_text(*values: object) -> str | None:
@@ -206,7 +263,7 @@ def decompose_task(
     cwd: Path,
     codex_bin: str = "codex",
     runner: CommandRunner = run_command,
-) -> list[Subtask]:
+) -> ExecutionPlan:
     prompt = build_codex_prompt(task)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -243,7 +300,7 @@ def decompose_task(
         if not response_text:
             response_text = (completed.stdout or "").strip()
         payload = parse_json_document(response_text)
-        return normalize_subtasks(payload)
+        return normalize_plan(payload)
 
 
 def format_subtask_for_jules(subtask: Subtask) -> str:
@@ -272,7 +329,18 @@ def dispatch_subtasks(
     cwd: Path,
     client: JulesClient,
     repo: str | None = None,
+    strategy: str = "parallel_subtasks",
+    require_plan_approval: bool = True,
 ) -> list[DispatchResult]:
+    if strategy == "sequential_subtasks":
+        raise PipelineError(
+            "Codex selected sequential_subtasks, which this CLI does not support yet."
+        )
+    if strategy == "single_session" and len(subtasks) != 1:
+        raise PipelineError(
+            "single_session plans must contain exactly one task."
+        )
+
     if repo is None:
         repo_info = get_git_remote_repo(cwd)
         if repo_info:
@@ -295,6 +363,7 @@ def dispatch_subtasks(
                 source_name=source_name,
                 starting_branch=starting_branch,
                 title=subtask.title,
+                require_plan_approval=require_plan_approval,
             )
             results.append(
                 DispatchResult(
@@ -324,8 +393,12 @@ def dispatch_subtasks(
 @dataclass(frozen=True)
 class PipelineOutcome:
     task: str
-    subtasks: list[Subtask]
+    plan: ExecutionPlan
     dispatches: list[DispatchResult]
+
+    @property
+    def subtasks(self) -> list[Subtask]:
+        return self.plan.tasks
 
 
 def run_pipeline(
@@ -337,16 +410,18 @@ def run_pipeline(
     codex_bin: str = "codex",
     runner: CommandRunner = run_command,
 ) -> PipelineOutcome:
-    subtasks = decompose_task(
+    plan = decompose_task(
         task,
         cwd=cwd,
         codex_bin=codex_bin,
         runner=runner,
     )
+    validate_plan(plan)
     dispatches = dispatch_subtasks(
-        subtasks,
+        plan.tasks,
         cwd=cwd,
         client=client,
         repo=repo,
+        strategy=plan.strategy,
     )
-    return PipelineOutcome(task=task, subtasks=subtasks, dispatches=dispatches)
+    return PipelineOutcome(task=task, plan=plan, dispatches=dispatches)

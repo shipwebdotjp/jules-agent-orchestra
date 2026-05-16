@@ -1,14 +1,14 @@
 # jules-agent
 
-`jules-agent` is a small CLI that uses Codex to break a task into subtasks, then submits each subtask to Jules as a separate session.
+`jules-agent` is a small CLI that uses Codex to break a task into an execution plan, then submits the resulting work to Jules.
 
 ## What it does
 
 1. Takes one task description.
-2. Asks Codex to return a JSON list of subtasks.
-3. Shows the proposed subtasks and asks for confirmation by default.
+2. Asks Codex to return a JSON plan with a strategy and tasks.
+3. Shows the proposed plan and asks for confirmation by default.
 4. If the plan is rejected, asks for feedback, revises the breakdown, and repeats until approved.
-5. Sends each subtask to `jules new` in order.
+5. Sends the tasks to Jules using the selected strategy.
 6. Prints each dispatch result with success/failure, and the session ID when it can be extracted.
 
 ## Requirements
@@ -88,14 +88,14 @@ The Codex step expects JSON shaped like this:
 
 ```json
 {
-  "subtasks": [
-    { "title": "First task" },
-    { "title": "Second task" }
+  "strategy": "single_session",
+  "tasks": [
+    { "title": "First task" }
   ]
 }
 ```
 
-Each subtask can also be a plain string. The dispatcher turns the title and any available details into the prompt passed to `jules new`.
+`strategy` can be `single_session`, `parallel_subtasks`, or `sequential_subtasks`. Each task can also be a plain string. The dispatcher turns the title and any available details into the prompt passed to `jules new`.
 
 ## Development
 

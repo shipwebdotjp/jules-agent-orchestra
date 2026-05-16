@@ -7,25 +7,25 @@ from pathlib import Path
 
 from .client import JulesClient
 from .config import load_config
-from .models import Subtask
+from .models import ExecutionPlan
 from .pipeline import (
     CommandRunner,
     PipelineError,
     PipelineOutcome,
     decompose_task,
     dispatch_subtasks,
-    is_git_repo,
     run_command,
     run_pipeline,
+    validate_plan,
 )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="jules-agent",
-        description="Decompose a task with Codex and dispatch subtasks to Jules.",
+        description="Analyze a task with Codex and dispatch it to Jules.",
     )
-    parser.add_argument("task", help="Task to split and dispatch.")
+    parser.add_argument("task", help="Task to analyze and dispatch.")
     parser.add_argument(
         "--repo",
         help="Optional Jules repo override, for example owner/name.",
@@ -59,16 +59,17 @@ def build_review_prompt(task: str, feedback_history: list[str]) -> str:
         f"{prompt}\n\n"
         "User feedback from the previous plan:\n"
         f"{feedback_lines}\n\n"
-        "Revise the subtasks to address the feedback."
+        "Revise the plan to address the feedback."
     )
 
 
-def render_subtasks(subtasks: list[Subtask], *, output=print) -> None:
-    output("Proposed subtasks:")
-    for index, subtask in enumerate(subtasks, start=1):
-        output(f"{index}. {subtask.title}")
-        if subtask.details:
-            output(f"   Details: {subtask.details}")
+def render_plan(plan: ExecutionPlan, *, output=print) -> None:
+    output(f"Proposed strategy: {plan.strategy}")
+    output("Proposed tasks:")
+    for index, task in enumerate(plan.tasks, start=1):
+        output(f"{index}. {task.title}")
+        if task.details:
+            output(f"   Details: {task.details}")
 
 
 def prompt_for_review(
@@ -108,24 +109,25 @@ def run_confirmation_loop(
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
-) -> tuple[list[Subtask], list[str]]:
+) -> tuple[ExecutionPlan, list[str]]:
     feedback_history: list[str] = []
     while True:
         review_task = build_review_prompt(task, feedback_history)
-        subtasks = decompose_task(
+        plan = decompose_task(
             review_task,
             cwd=cwd,
             codex_bin=codex_bin,
             runner=runner,
         )
-        render_subtasks(subtasks, output=output)
+        validate_plan(plan)
+        render_plan(plan, output=output)
 
         feedback = prompt_for_review(input_func=input_func, output=output)
         if feedback is None:
-            return subtasks, feedback_history
+            return plan, feedback_history
 
         feedback_history.append(feedback)
-        output("Revising subtasks with feedback...")
+        output("Revising plan with feedback...")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -157,21 +159,22 @@ def main(argv: list[str] | None = None) -> int:
                 codex_bin=codex_bin,
             )
         else:
-            subtasks, _ = run_confirmation_loop(
+            plan, _ = run_confirmation_loop(
                 args.task,
                 cwd=Path.cwd(),
                 codex_bin=codex_bin,
                 runner=run_command,
             )
             dispatches = dispatch_subtasks(
-                subtasks,
+                plan.tasks,
                 cwd=Path.cwd(),
                 client=client,
                 repo=repo,
+                strategy=plan.strategy,
             )
             outcome = PipelineOutcome(
                 task=args.task,
-                subtasks=subtasks,
+                plan=plan,
                 dispatches=dispatches,
             )
     except PipelineError as exc:

@@ -58,6 +58,7 @@ class JulesClient:
         starting_branch: str,
         title: str | None = None,
         automation_mode: str = "AUTOMATION_MODE_UNSPECIFIED",
+        require_plan_approval: bool = False,
     ) -> dict[str, Any]:
         url = f"{self.base_url}/sessions"
         payload = {
@@ -72,6 +73,8 @@ class JulesClient:
         }
         if title:
             payload["title"] = title
+        if require_plan_approval:
+            payload["requirePlanApproval"] = True
 
         with httpx.Client() as client:
             response = client.post(url, headers=self.headers, json=payload)

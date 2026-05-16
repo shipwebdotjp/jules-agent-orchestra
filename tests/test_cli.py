@@ -55,16 +55,16 @@ class CliTests(unittest.TestCase):
             if "--output-last-message" in args:
                 last_message_path = Path(args[args.index("--output-last-message") + 1])
                 payload = (
-                    '{"subtasks":[{"title":"Plan"}]}'
+                    '{"strategy":"single_session","tasks":[{"title":"Plan"}]}'
                     if call_count == 0
-                    else '{"subtasks":[{"title":"Plan revised"}]}'
+                    else '{"strategy":"single_session","tasks":[{"title":"Plan revised"}]}'
                 )
                 last_message_path.write_text(payload, encoding="utf-8")
                 call_count += 1
             return responses.pop(0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            subtasks, feedback_history = run_confirmation_loop(
+            plan, feedback_history = run_confirmation_loop(
                 "Build a CLI",
                 cwd=Path(tmpdir),
                 codex_bin="codex",
@@ -73,10 +73,12 @@ class CliTests(unittest.TestCase):
                 output=output_func,
             )
 
-        self.assertEqual([subtask.title for subtask in subtasks], ["Plan revised"])
+        self.assertEqual(plan.strategy, "single_session")
+        self.assertEqual([task.title for task in plan.tasks], ["Plan revised"])
         self.assertEqual(feedback_history, ["Add tests"])
-        self.assertIn("Proposed subtasks:", outputs)
-        self.assertIn("Revising subtasks with feedback...", outputs)
+        self.assertIn("Proposed strategy: single_session", outputs)
+        self.assertIn("Proposed tasks:", outputs)
+        self.assertIn("Revising plan with feedback...", outputs)
         self.assertEqual(len(calls), 2)
         self.assertIn("User feedback from the previous plan:", calls[1][-1])
         self.assertIn("Add tests", calls[1][-1])

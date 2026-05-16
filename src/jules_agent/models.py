@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
+
+
+ExecutionStrategy = Literal["single_session", "parallel_subtasks", "sequential_subtasks"]
 
 
 @dataclass(frozen=True)
 class Subtask:
     title: str
     details: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionPlan:
+    strategy: ExecutionStrategy
+    tasks: list[Subtask]
 
 
 @dataclass(frozen=True)
