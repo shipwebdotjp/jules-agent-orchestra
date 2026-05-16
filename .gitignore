@@ -11,3 +11,4 @@ dist/
 .ruff_cache/
 .coverage
 coverage.xml
+.jules-agent/

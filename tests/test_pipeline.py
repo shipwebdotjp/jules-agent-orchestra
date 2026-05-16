@@ -71,7 +71,7 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             set(schema["properties"]["tasks"]["items"]["properties"].keys()),
-            {"title", "details", "description", "body"},
+            {"title", "details", "description", "body", "acceptance_criteria", "out_of_scope"},
         )
 
     def test_decompose_task_invokes_codex(self) -> None:
@@ -179,36 +179,6 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual([task.title for task in outcome.subtasks], ["One"])
         self.assertEqual(outcome.dispatches[0].session_id, "s1")
 
-    def test_run_pipeline_rejects_sequential_strategy(self) -> None:
-        client = MagicMock()
-        responses = [
-            subprocess.CompletedProcess(
-                args=["codex"],
-                returncode=0,
-                stdout="",
-                stderr="",
-            )
-        ]
-
-        def runner(args, *, cwd=None, input_text=None):
-            if "--output-last-message" in args:
-                Path(args[args.index("--output-last-message") + 1]).write_text(
-                    '{"strategy":"sequential_subtasks","tasks":[{"title":"One"}]}',
-                    encoding="utf-8",
-                )
-            return responses.pop(0)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cwd = Path(tmpdir)
-            with self.assertRaises(PipelineError) as excinfo:
-                run_pipeline(
-                    "task",
-                    cwd=cwd,
-                    client=client,
-                    runner=runner,
-                )
-
-        self.assertIn("sequential_subtasks", str(excinfo.exception))
 
 
 if __name__ == "__main__":

@@ -64,7 +64,7 @@ class CliTests(unittest.TestCase):
             return responses.pop(0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            plan, feedback_history = run_confirmation_loop(
+            plan = run_confirmation_loop(
                 "Build a CLI",
                 cwd=Path(tmpdir),
                 codex_bin="codex",
@@ -75,7 +75,6 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(plan.strategy, "single_session")
         self.assertEqual([task.title for task in plan.tasks], ["Plan revised"])
-        self.assertEqual(feedback_history, ["Add tests"])
         self.assertIn("Proposed strategy: single_session", outputs)
         self.assertIn("Proposed tasks:", outputs)
         self.assertIn("Revising plan with feedback...", outputs)
