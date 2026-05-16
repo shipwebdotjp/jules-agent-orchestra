@@ -87,3 +87,46 @@ class JulesClient:
             )
 
         return response.json()
+
+    def get_session(self, session_name: str) -> dict[str, Any]:
+        url = f"{self.base_url}/{session_name}"
+        with httpx.Client() as client:
+            response = client.get(url, headers=self.headers)
+
+        if response.status_code != 200:
+            raise JulesAPIError(
+                f"Failed to get session: {response.text}",
+                status_code=response.status_code,
+                response_body=response.text,
+            )
+
+        return response.json()
+
+    def approve_plan(self, session_name: str) -> dict[str, Any]:
+        url = f"{self.base_url}/{session_name}:approvePlan"
+        with httpx.Client() as client:
+            response = client.post(url, headers=self.headers)
+
+        if response.status_code != 200:
+            raise JulesAPIError(
+                f"Failed to approve plan: {response.text}",
+                status_code=response.status_code,
+                response_body=response.text,
+            )
+
+        return response.json()
+
+    def send_message(self, session_name: str, message: str) -> dict[str, Any]:
+        url = f"{self.base_url}/{session_name}:sendMessage"
+        payload = {"message": message}
+        with httpx.Client() as client:
+            response = client.post(url, headers=self.headers, json=payload)
+
+        if response.status_code != 200:
+            raise JulesAPIError(
+                f"Failed to send message: {response.text}",
+                status_code=response.status_code,
+                response_body=response.text,
+            )
+
+        return response.json()

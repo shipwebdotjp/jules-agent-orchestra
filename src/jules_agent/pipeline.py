@@ -4,12 +4,21 @@ import json
 import re
 import subprocess
 import tempfile
+import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
 from .client import JulesAPIError, JulesClient
-from .models import DispatchResult, ExecutionPlan, Subtask
+from .models import (
+    DispatchResult,
+    ExecutionPlan,
+    ProjectState,
+    Run,
+    State,
+    Subtask,
+    Task,
+)
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -39,6 +48,22 @@ def run_command(
         text=True,
         check=False,
     )
+
+
+def get_git_root(cwd: Path) -> Path:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return Path(completed.stdout.strip())
+    except OSError:
+        pass
+    return cwd
 
 
 def is_git_repo(cwd: Path) -> bool:
@@ -133,6 +158,14 @@ def codex_schema() -> dict[str, object]:
                         "details": {"type": "string"},
                         "description": {"type": "string"},
                         "body": {"type": "string"},
+                        "acceptance_criteria": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "out_of_scope": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
                     },
                     "required": ["title"],
                 },
@@ -233,7 +266,15 @@ def _normalize_tasks(raw_items: object) -> list[Subtask]:
         if not title:
             raise PipelineError(f"Task {index} is missing a title.")
 
-        tasks.append(Subtask(title=title, details=details))
+        acceptance_criteria = item.get("acceptance_criteria", []) if isinstance(item, dict) else []
+        out_of_scope = item.get("out_of_scope", []) if isinstance(item, dict) else []
+
+        tasks.append(Subtask(
+            title=title,
+            details=details,
+            acceptance_criteria=acceptance_criteria,
+            out_of_scope=out_of_scope
+        ))
 
     if not tasks:
         raise PipelineError("Codex returned zero tasks.")
@@ -242,10 +283,7 @@ def _normalize_tasks(raw_items: object) -> list[Subtask]:
 
 
 def validate_plan(plan: ExecutionPlan) -> None:
-    if plan.strategy == "sequential_subtasks":
-        raise PipelineError(
-            "Codex selected sequential_subtasks, which this CLI does not support yet."
-        )
+    pass
 
 
 def _first_non_empty_text(*values: object) -> str | None:
@@ -399,6 +437,50 @@ class PipelineOutcome:
     @property
     def subtasks(self) -> list[Subtask]:
         return self.plan.tasks
+
+
+def load_state(cwd: Path) -> State | None:
+    root = get_git_root(cwd)
+    state_path = root / ".jules-agent" / "state.json"
+    if not state_path.exists():
+        return None
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        return State.from_dict(data)
+    except (json.JSONDecodeError, KeyError, OSError):
+        return None
+
+
+def save_state(cwd: Path, state: State) -> None:
+    root = get_git_root(cwd)
+    state_dir = root / ".jules-agent"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_path = state_dir / "state.json"
+
+    # Use atomic write: write to .tmp then rename
+    tmp_path = state_path.with_suffix(".json.tmp")
+    data = state.to_dict()
+    tmp_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp_path.rename(state_path)
+
+
+def generate_run_id(state: State) -> str:
+    now = datetime.datetime.now()
+    date_str = now.strftime("%Y%m%d")
+
+    # Count existing runs for today to determine sequence number
+    today_prefix = f"run_{date_str}_"
+    max_seq = 0
+    for run in state.runs:
+        if run.id.startswith(today_prefix):
+            try:
+                seq = int(run.id[len(today_prefix):])
+                if seq > max_seq:
+                    max_seq = seq
+            except ValueError:
+                continue
+
+    return f"run_{date_str}_{max_seq + 1:03d}"
 
 
 def run_pipeline(
