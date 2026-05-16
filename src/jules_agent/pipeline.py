@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
+from .client import JulesAPIError, JulesClient
 from .models import DispatchResult, Subtask
 
 
@@ -46,6 +47,50 @@ def is_git_repo(cwd: Path) -> bool:
     except OSError:
         return False
     return completed.returncode == 0 and completed.stdout.strip() == "true"
+
+
+def get_git_branch(cwd: Path) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return completed.stdout.strip()
+    except OSError:
+        pass
+    return "main"
+
+
+def get_git_remote_repo(cwd: Path) -> tuple[str, str] | None:
+    try:
+        completed = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return None
+        url = completed.stdout.strip()
+        # Matches patterns like:
+        # https://github.com/owner/repo.git
+        # git@github.com:owner/repo.git
+        patterns = [
+            r"github\.com[:/]([^/]+)/([^/.]+)(?:\.git)?$",
+            r"https?://[^/]+/([^/]+)/([^/.]+)(?:\.git)?$",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1), match.group(2)
+    except OSError:
+        pass
+    return None
 
 
 def build_codex_prompt(task: str) -> str:
@@ -207,68 +252,71 @@ def format_subtask_for_jules(subtask: Subtask) -> str:
     return subtask.title
 
 
-def extract_session_id(output: str) -> str | None:
-    session_patterns = [
-        re.compile(
-            r"\bsession(?:\s+id)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9_-]{3,})\b",
-            re.IGNORECASE,
-        ),
-        re.compile(
-            r"\bcreated\s+session\s+([A-Za-z0-9][A-Za-z0-9_-]{3,})\b",
-            re.IGNORECASE,
-        ),
-        re.compile(
-            r"\bsession\s+([A-Za-z0-9][A-Za-z0-9_-]{3,})\b",
-            re.IGNORECASE,
-        ),
-        re.compile(r"\b(\d{5,})\b"),
-    ]
-    for pattern in session_patterns:
-        match = pattern.search(output)
-        if match:
-            return match.group(1)
-    return None
+def find_source_name(client: JulesClient, repo: str) -> str:
+    try:
+        owner, name = repo.split("/", 1)
+    except ValueError:
+        raise PipelineError(f"Invalid repo format: {repo}. Expected owner/repo.")
+
+    for source in client.list_sources():
+        gh_repo = source.get("githubRepo")
+        if gh_repo and gh_repo.get("owner") == owner and gh_repo.get("repo") == name:
+            return source["name"]
+
+    raise PipelineError(f"Could not find source for repo: {repo}")
 
 
 def dispatch_subtasks(
     subtasks: Sequence[Subtask],
     *,
     cwd: Path,
+    client: JulesClient,
     repo: str | None = None,
-    jules_bin: str = "jules",
-    runner: CommandRunner = run_command,
 ) -> list[DispatchResult]:
+    if repo is None:
+        repo_info = get_git_remote_repo(cwd)
+        if repo_info:
+            repo = f"{repo_info[0]}/{repo_info[1]}"
+
+    if repo is None:
+        raise PipelineError(
+            "Could not determine repository. Pass --repo owner/name or run in a git repo with an origin remote."
+        )
+
+    source_name = find_source_name(client, repo)
+    starting_branch = get_git_branch(cwd)
+
     results: list[DispatchResult] = []
     for index, subtask in enumerate(subtasks, start=1):
-        args = [jules_bin, "new"]
-        if repo:
-            args.extend(["--repo", repo])
-        args.append(format_subtask_for_jules(subtask))
-
-        completed = runner(args, cwd=cwd)
-        combined_output = "\n".join(
-            piece for piece in (completed.stdout, completed.stderr) if piece
-        ).strip()
-        results.append(
-            DispatchResult(
-                index=index,
-                subtask=subtask,
-                session_id=extract_session_id(combined_output),
-                raw_output=combined_output,
-                returncode=completed.returncode,
-                error_message=(
-                    None
-                    if completed.returncode == 0
-                    else (
-                        f"Jules failed on subtask {index}.\n"
-                        f"Command: {' '.join(args)}\n"
-                        f"stdout:\n{completed.stdout}\n"
-                        f"stderr:\n{completed.stderr}"
-                    )
-                ),
+        prompt = format_subtask_for_jules(subtask)
+        try:
+            session = client.create_session(
+                prompt=prompt,
+                source_name=source_name,
+                starting_branch=starting_branch,
+                title=subtask.title,
             )
-        )
-        if completed.returncode != 0:
+            results.append(
+                DispatchResult(
+                    index=index,
+                    subtask=subtask,
+                    session_id=session.get("id"),
+                    url=session.get("url"),
+                    raw_output=json.dumps(session, indent=2),
+                    returncode=0,
+                )
+            )
+        except JulesAPIError as exc:
+            results.append(
+                DispatchResult(
+                    index=index,
+                    subtask=subtask,
+                    session_id=None,
+                    raw_output=exc.response_body or str(exc),
+                    returncode=1,
+                    error_message=f"Jules API failed on subtask {index}: {exc}",
+                )
+            )
             break
     return results
 
@@ -284,16 +332,11 @@ def run_pipeline(
     task: str,
     *,
     cwd: Path,
+    client: JulesClient,
     repo: str | None = None,
     codex_bin: str = "codex",
-    jules_bin: str = "jules",
     runner: CommandRunner = run_command,
 ) -> PipelineOutcome:
-    if repo is None and not is_git_repo(cwd):
-        raise PipelineError(
-            "Current directory is not a git repository. Pass --repo owner/name "
-            "or run the CLI inside a git repo."
-        )
     subtasks = decompose_task(
         task,
         cwd=cwd,
@@ -303,8 +346,7 @@ def run_pipeline(
     dispatches = dispatch_subtasks(
         subtasks,
         cwd=cwd,
+        client=client,
         repo=repo,
-        jules_bin=jules_bin,
-        runner=runner,
     )
     return PipelineOutcome(task=task, subtasks=subtasks, dispatches=dispatches)

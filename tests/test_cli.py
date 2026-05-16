@@ -67,7 +67,6 @@ class CliTests(unittest.TestCase):
             subtasks, feedback_history = run_confirmation_loop(
                 "Build a CLI",
                 cwd=Path(tmpdir),
-                repo="example-org/example-repo",
                 codex_bin="codex",
                 runner=runner,
                 input_func=input_func,
