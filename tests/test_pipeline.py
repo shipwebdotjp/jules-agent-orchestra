@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -12,11 +14,11 @@ from jules_agent.pipeline import (
     codex_schema,
     decompose_task,
     dispatch_subtasks,
-    extract_session_id,
     normalize_subtasks,
     parse_json_document,
     run_pipeline,
 )
+from jules_agent.models import Subtask
 
 
 class FakeRunner:
@@ -68,14 +70,6 @@ class PipelineTests(unittest.TestCase):
             {"title"},
         )
 
-    def test_extract_session_id_prefers_session_pattern(self) -> None:
-        output = "Created session 123456 for your task."
-        self.assertEqual(extract_session_id(output), "123456")
-
-    def test_extract_session_id_accepts_alphanumeric_session_ids(self) -> None:
-        output = "Created session abc123-def for your task."
-        self.assertEqual(extract_session_id(output), "abc123-def")
-
     def test_decompose_task_invokes_codex(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             cwd = Path(tmpdir)
@@ -105,48 +99,49 @@ class PipelineTests(unittest.TestCase):
 
         self.assertEqual([subtask.title for subtask in subtasks], ["Plan", "Implement"])
 
-    def test_dispatch_subtasks_invokes_jules_in_order(self) -> None:
-        runner = FakeRunner(
-            [
-                subprocess.CompletedProcess(
-                    args=["jules", "new"],
-                    returncode=0,
-                    stdout="Created session 111111\n",
-                    stderr="",
-                ),
-                subprocess.CompletedProcess(
-                    args=["jules", "new"],
-                    returncode=0,
-                    stdout="Created session 222222\n",
-                    stderr="",
-                ),
-            ]
-        )
-        results = dispatch_subtasks(
-            [
-                normalize_subtasks({"subtasks": [{"title": "One"}]})[0],
-                normalize_subtasks({"subtasks": [{"title": "Two"}]})[0],
-            ],
-            cwd=Path("."),
-            runner=runner,
-        )
-        self.assertEqual([result.session_id for result in results], ["111111", "222222"])
-        self.assertEqual(len(runner.calls), 2)
+    def test_dispatch_subtasks_invokes_api(self) -> None:
+        client = MagicMock()
+        client.list_sources.return_value = [
+            {"name": "sources/1", "githubRepo": {"owner": "o1", "repo": "r1"}}
+        ]
+        client.create_session.side_effect = [
+            {"id": "s1", "url": "u1"},
+            {"id": "s2", "url": "u2"},
+        ]
 
-    def test_run_pipeline_stops_on_jules_failure(self) -> None:
+        # Mock git commands
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=cwd, check=True)
+            subprocess.run(["git", "remote", "add", "origin", "https://github.com/o1/r1.git"], cwd=cwd, check=True)
+            subprocess.run(["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True)
+
+            subtasks = [Subtask(title="One"), Subtask(title="Two")]
+            results = dispatch_subtasks(
+                subtasks,
+                cwd=cwd,
+                client=client,
+            )
+
+            self.assertEqual(len(results), 2)
+            self.assertEqual(results[0].session_id, "s1")
+            self.assertEqual(results[1].session_id, "s2")
+            self.assertEqual(client.create_session.call_count, 2)
+
+    def test_run_pipeline_uses_api(self) -> None:
+        client = MagicMock()
+        client.list_sources.return_value = [
+            {"name": "sources/1", "githubRepo": {"owner": "o1", "repo": "r1"}}
+        ]
+        client.create_session.return_value = {"id": "s1"}
+
         responses = [
             subprocess.CompletedProcess(
                 args=["codex"],
                 returncode=0,
                 stdout="",
                 stderr="",
-            ),
-            subprocess.CompletedProcess(
-                args=["jules", "new"],
-                returncode=1,
-                stdout="",
-                stderr="boom",
-            ),
+            )
         ]
 
         def runner(args, *, cwd=None, input_text=None):
@@ -158,16 +153,20 @@ class PipelineTests(unittest.TestCase):
             return responses.pop(0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=cwd, check=True)
+            subprocess.run(["git", "remote", "add", "origin", "https://github.com/o1/r1.git"], cwd=cwd, check=True)
+            subprocess.run(["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True)
+
             outcome = run_pipeline(
                 "task",
-                cwd=Path(tmpdir),
-                repo="example-org/example-repo",
+                cwd=cwd,
+                client=client,
                 runner=runner,
             )
 
         self.assertEqual(len(outcome.dispatches), 1)
-        self.assertEqual(outcome.dispatches[0].returncode, 1)
-        self.assertIsNotNone(outcome.dispatches[0].error_message)
+        self.assertEqual(outcome.dispatches[0].session_id, "s1")
 
 
 if __name__ == "__main__":

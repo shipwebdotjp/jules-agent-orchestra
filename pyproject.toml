@@ -7,6 +7,15 @@ name = "jules-agent"
 version = "0.1.0"
 description = "Decompose a task with Codex and dispatch the subtasks to Jules."
 requires-python = ">=3.12"
+dependencies = [
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "respx",
+]
 
 [project.scripts]
 jules-agent = "jules_agent.cli:main"
