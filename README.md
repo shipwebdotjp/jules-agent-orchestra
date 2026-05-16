@@ -38,8 +38,29 @@ Optional flags:
 
 - `--repo owner/name` override the Jules repository target
 - `--codex-bin /path/to/codex` use a different Codex executable
-- `--jules-bin /path/to/jules` use a different Jules executable
 - `--no-confirm` skip the confirmation loop and dispatch immediately
+- `--config /path/to/config.toml` specify a custom configuration file
+
+## Configuration
+
+`jules-agent` can be configured using TOML files. It searches for configuration in the following locations (in order of increasing priority):
+
+1. `~/.jules-agent.toml`
+2. `~/.config/jules-agent/config.toml`
+3. `./.jules-agent.toml`
+4. `./jules-agent.toml`
+5. A custom file specified via `--config`
+
+Settings in the configuration file have lower priority than environment variables and command-line flags.
+
+### Supported Settings
+
+```toml
+api_key = "your-jules-api-key"
+repo = "owner/repo"
+codex_bin = "codex"
+base_url = "https://jules.googleapis.com/v1alpha"
+```
 
 Example:
 
