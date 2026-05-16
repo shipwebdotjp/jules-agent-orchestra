@@ -51,8 +51,11 @@ def is_git_repo(cwd: Path) -> bool:
 def build_codex_prompt(task: str) -> str:
     return (
         "Break the task into a JSON object matching the supplied schema.\n"
-        "Return only JSON. Keep subtasks concise, independently actionable,\n"
-        "and ordered from first to last.\n\n"
+        "Each subtask must correspond to a single, self-contained pull request:\n"
+        "  - independently reviewable and mergeable\n"
+        "  - scoped to one logical change (e.g. one feature, one refactor, one fix)\n"
+        "  - ordered so each builds on the previous without circular dependencies\n"
+        "Return only JSON. Keep subtask descriptions concise and actionable.\n\n"
         f"Task:\n{task.strip()}"
     )
 
