@@ -64,14 +64,26 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             schema["properties"]["tasks"]["items"]["required"],
-            ["title"],
+            [
+                "title",
+                "details",
+                "description",
+                "body",
+                "acceptance_criteria",
+                "out_of_scope",
+            ],
         )
-        self.assertFalse(
-            schema["properties"]["tasks"]["items"]["additionalProperties"]
-        )
+        self.assertFalse(schema["properties"]["tasks"]["items"]["additionalProperties"])
         self.assertEqual(
             set(schema["properties"]["tasks"]["items"]["properties"].keys()),
-            {"title", "details", "description", "body", "acceptance_criteria", "out_of_scope"},
+            {
+                "title",
+                "details",
+                "description",
+                "body",
+                "acceptance_criteria",
+                "out_of_scope",
+            },
         )
 
     def test_decompose_task_invokes_codex(self) -> None:
@@ -88,7 +100,9 @@ class PipelineTests(unittest.TestCase):
 
             def runner(args, *, cwd=None, input_text=None):
                 if "--output-last-message" in args:
-                    last_message_path = Path(args[args.index("--output-last-message") + 1])
+                    last_message_path = Path(
+                        args[args.index("--output-last-message") + 1]
+                    )
                     last_message_path.write_text(
                         '{"strategy":"parallel_subtasks","tasks":[{"title":"Plan"},{"title":"Implement"}]}',
                         encoding="utf-8",
@@ -118,8 +132,14 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cwd = Path(tmpdir)
             subprocess.run(["git", "init"], cwd=cwd, check=True)
-            subprocess.run(["git", "remote", "add", "origin", "https://github.com/o1/r1.git"], cwd=cwd, check=True)
-            subprocess.run(["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
+                cwd=cwd,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
+            )
 
             subtasks = [Subtask(title="One"), Subtask(title="Two")]
             results = dispatch_subtasks(
@@ -164,8 +184,14 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cwd = Path(tmpdir)
             subprocess.run(["git", "init"], cwd=cwd, check=True)
-            subprocess.run(["git", "remote", "add", "origin", "https://github.com/o1/r1.git"], cwd=cwd, check=True)
-            subprocess.run(["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
+                cwd=cwd,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
+            )
 
             outcome = run_pipeline(
                 "task",
@@ -178,7 +204,6 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(outcome.plan.strategy, "single_session")
         self.assertEqual([task.title for task in outcome.subtasks], ["One"])
         self.assertEqual(outcome.dispatches[0].session_id, "s1")
-
 
 
 if __name__ == "__main__":

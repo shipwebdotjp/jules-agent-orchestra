@@ -160,16 +160,20 @@ def codex_schema() -> dict[str, object]:
                         "body": {"type": "string"},
                         "acceptance_criteria": {
                             "type": "array",
-                            "items": {"type": "string"}
+                            "items": {"type": "string"},
                         },
-                        "out_of_scope": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
+                        "out_of_scope": {"type": "array", "items": {"type": "string"}},
                     },
-                    "required": ["title"],
+                    "required": [
+                        "title",
+                        "details",
+                        "description",
+                        "body",
+                        "acceptance_criteria",
+                        "out_of_scope",
+                    ],
                 },
-            }
+            },
         },
         "required": ["strategy", "tasks"],
     }
@@ -181,7 +185,9 @@ def parse_json_document(text: str) -> object:
         raise PipelineError("Codex returned an empty response.")
 
     if stripped.startswith("```"):
-        stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", stripped, flags=re.IGNORECASE | re.DOTALL).strip()
+        stripped = re.sub(
+            r"^```(?:json)?\s*|\s*```$", "", stripped, flags=re.IGNORECASE | re.DOTALL
+        ).strip()
 
     try:
         return json.loads(stripped)
@@ -266,15 +272,19 @@ def _normalize_tasks(raw_items: object) -> list[Subtask]:
         if not title:
             raise PipelineError(f"Task {index} is missing a title.")
 
-        acceptance_criteria = item.get("acceptance_criteria", []) if isinstance(item, dict) else []
+        acceptance_criteria = (
+            item.get("acceptance_criteria", []) if isinstance(item, dict) else []
+        )
         out_of_scope = item.get("out_of_scope", []) if isinstance(item, dict) else []
 
-        tasks.append(Subtask(
-            title=title,
-            details=details,
-            acceptance_criteria=acceptance_criteria,
-            out_of_scope=out_of_scope
-        ))
+        tasks.append(
+            Subtask(
+                title=title,
+                details=details,
+                acceptance_criteria=acceptance_criteria,
+                out_of_scope=out_of_scope,
+            )
+        )
 
     if not tasks:
         raise PipelineError("Codex returned zero tasks.")
@@ -375,9 +385,7 @@ def dispatch_subtasks(
             "Codex selected sequential_subtasks, which this CLI does not support yet."
         )
     if strategy == "single_session" and len(subtasks) != 1:
-        raise PipelineError(
-            "single_session plans must contain exactly one task."
-        )
+        raise PipelineError("single_session plans must contain exactly one task.")
 
     if repo is None:
         repo_info = get_git_remote_repo(cwd)
@@ -460,7 +468,9 @@ def save_state(cwd: Path, state: State) -> None:
     # Use atomic write: write to .tmp then rename
     tmp_path = state_path.with_suffix(".json.tmp")
     data = state.to_dict()
-    tmp_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp_path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     tmp_path.rename(state_path)
 
 
@@ -474,7 +484,7 @@ def generate_run_id(state: State) -> str:
     for run in state.runs:
         if run.id.startswith(today_prefix):
             try:
-                seq = int(run.id[len(today_prefix):])
+                seq = int(run.id[len(today_prefix) :])
                 if seq > max_seq:
                     max_seq = seq
             except ValueError:

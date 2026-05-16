@@ -9,7 +9,15 @@ from typing import Sequence
 
 from .client import JulesClient
 from .config import load_config
-from .models import ExecutionPlan, State, ProjectState, Run, Task, JulesSessionInfo, PullRequestInfo
+from .models import (
+    ExecutionPlan,
+    State,
+    ProjectState,
+    Run,
+    Task,
+    JulesSessionInfo,
+    PullRequestInfo,
+)
 from .pipeline import (
     CommandRunner,
     PipelineError,
@@ -84,7 +92,8 @@ def build_review_prompt(task: str, feedback_history: list[str]) -> str:
         return prompt
 
     feedback_lines = "\n".join(
-        f"{index}. {feedback}" for index, feedback in enumerate(feedback_history, start=1)
+        f"{index}. {feedback}"
+        for index, feedback in enumerate(feedback_history, start=1)
     )
     return (
         f"{prompt}\n\n"
@@ -226,8 +235,12 @@ def sync_task(client: JulesClient, task: Task) -> bool:
                 )
                 has_pr = True
 
-        task.status = get_jules_state_mapping(task.jules.state, has_pr) # type: ignore
-        task.updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+        task.status = get_jules_state_mapping(task.jules.state, has_pr)  # type: ignore
+        task.updated_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
         return True
     except Exception as e:
         print(f"Failed to sync task {task.id}: {e}", file=sys.stderr)
@@ -270,7 +283,9 @@ def main(argv: list[str] | None = None) -> int:
                 if repo_info:
                     repo = f"{repo_info[0]}/{repo_info[1]}"
             if repo is None:
-                parser.exit(1, "Error: Could not determine repository. Use --repo owner/name.\n")
+                parser.exit(
+                    1, "Error: Could not determine repository. Use --repo owner/name.\n"
+                )
 
             state = State(project=ProjectState(root=str(git_root), repo=repo))
 
@@ -281,7 +296,11 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 plan = run_confirmation_loop(args.task, cwd=cwd, codex_bin=codex_bin)
 
-            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            now_iso = (
+                datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
             run_id = generate_run_id(state)
             run = Run(
                 id=run_id,
@@ -312,7 +331,10 @@ def main(argv: list[str] | None = None) -> int:
 
             # Initial dispatch
             tasks_to_dispatch = []
-            if plan.strategy == "single_session" or plan.strategy == "parallel_subtasks":
+            if (
+                plan.strategy == "single_session"
+                or plan.strategy == "parallel_subtasks"
+            ):
                 tasks_to_dispatch = run.tasks
             elif plan.strategy == "sequential_subtasks":
                 tasks_to_dispatch = [run.tasks[0]]
@@ -336,18 +358,22 @@ def main(argv: list[str] | None = None) -> int:
                     task.jules = JulesSessionInfo(
                         session_id=session["id"],
                         session_name=session["name"],
-                        state=session["state"],
+                        state=session.get("state", "QUEUED"),
                         session_url=session.get("url"),
                         create_time=session.get("createTime"),
                         update_time=session.get("updateTime"),
                     )
-                    task.status = get_jules_state_mapping(task.jules.state, False) # type: ignore
+                    task.status = get_jules_state_mapping(task.jules.state, False)  # type: ignore
                     print(f"  Success: {task.jules.session_url}")
                 except Exception as e:
                     task.status = "failed"
                     print(f"  Failed: {e}", file=sys.stderr)
 
-                task.updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                task.updated_at = (
+                    datetime.datetime.now(datetime.timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                )
                 save_state(cwd, state)
 
         elif args.command == "status":
@@ -369,22 +395,36 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "sync":
             updated_count = 0
             for run in state.runs:
-                if run.status in ("running", "planned"):
+                if run.status in ("running", "planned", "failed"):
                     run_updated = False
                     for task in run.tasks:
-                        if task.status not in ("completed", "pr_created", "merged", "failed", "cancelled"):
+                        # print(f"Syncing task {task.id} - {task.title} [{task.status}]...")
+                        if task.status not in (
+                            "completed",
+                            "pr_created",
+                            "merged",
+                            "failed",
+                            "cancelled",
+                        ):
                             if sync_task(client, task):
                                 updated_count += 1
                                 run_updated = True
 
                     if run_updated:
                         # Update run status if all tasks are done
-                        if all(t.status in ("completed", "pr_created", "merged") for t in run.tasks):
+                        if all(
+                            t.status in ("completed", "pr_created", "merged")
+                            for t in run.tasks
+                        ):
                             run.status = "completed"
                         elif any(t.status == "failed" for t in run.tasks):
                             # This is a bit simple, might need better logic
                             pass
-                        run.updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                        run.updated_at = (
+                            datetime.datetime.now(datetime.timezone.utc)
+                            .isoformat()
+                            .replace("+00:00", "Z")
+                        )
 
             save_state(cwd, state)
             print(f"Synced {updated_count} tasks.")
@@ -392,23 +432,35 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "approve":
             run, task = resolve_task(state, args.task_id)
             if not task.jules:
-                parser.exit(1, f"Error: Task {args.task_id} has not been dispatched yet.\n")
+                parser.exit(
+                    1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
+                )
 
             print(f"Approving plan for task {args.task_id}...")
             client.approve_plan(task.jules.session_name)
             task.status = "plan_approved"
-            task.updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            task.updated_at = (
+                datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
             save_state(cwd, state)
             print("Done.")
 
         elif args.command == "send":
             run, task = resolve_task(state, args.task_id)
             if not task.jules:
-                parser.exit(1, f"Error: Task {args.task_id} has not been dispatched yet.\n")
+                parser.exit(
+                    1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
+                )
 
             print(f"Sending message to task {args.task_id}...")
             client.send_message(task.jules.session_name, args.message)
-            task.updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            task.updated_at = (
+                datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
             save_state(cwd, state)
             print("Done.")
 
@@ -454,18 +506,22 @@ def main(argv: list[str] | None = None) -> int:
                 next_task.jules = JulesSessionInfo(
                     session_id=session["id"],
                     session_name=session["name"],
-                    state=session["state"],
+                    state=session.get("state", "QUEUED"),
                     session_url=session.get("url"),
                     create_time=session.get("createTime"),
                     update_time=session.get("updateTime"),
                 )
-                next_task.status = get_jules_state_mapping(next_task.jules.state, False) # type: ignore
+                next_task.status = get_jules_state_mapping(next_task.jules.state, False)  # type: ignore
                 print(f"  Success: {next_task.jules.session_url}")
             except Exception as e:
                 next_task.status = "failed"
                 print(f"  Failed: {e}", file=sys.stderr)
 
-            next_task.updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            next_task.updated_at = (
+                datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
             save_state(cwd, state)
 
     except PipelineError as exc:
