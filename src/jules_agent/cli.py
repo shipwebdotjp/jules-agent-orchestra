@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .client import JulesClient
+from .config import load_config
 from .models import Subtask
 from .pipeline import (
     CommandRunner,
@@ -31,13 +32,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--codex-bin",
-        default="codex",
         help="Path to the codex executable.",
     )
     parser.add_argument(
         "--no-confirm",
         action="store_true",
         help="Skip the confirmation loop and dispatch immediately.",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Path to a custom configuration file.",
     )
     return parser
 
@@ -127,11 +132,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    api_key = os.environ.get("JULES_API_KEY")
-    if not api_key:
-        parser.exit(1, "Error: JULES_API_KEY environment variable is not set.\n")
+    config = load_config(args.config)
 
-    client = JulesClient(api_key=api_key)
+    api_key = os.environ.get("JULES_API_KEY") or config.api_key
+    if not api_key:
+        parser.exit(
+            1,
+            "Error: JULES_API_KEY is not set in environment or configuration.\n",
+        )
+
+    repo = args.repo or config.repo
+    codex_bin = args.codex_bin or config.codex_bin
+    base_url = config.base_url
+
+    client = JulesClient(api_key=api_key, base_url=base_url)
 
     try:
         if args.no_confirm:
@@ -139,21 +153,21 @@ def main(argv: list[str] | None = None) -> int:
                 args.task,
                 cwd=Path.cwd(),
                 client=client,
-                repo=args.repo,
-                codex_bin=args.codex_bin,
+                repo=repo,
+                codex_bin=codex_bin,
             )
         else:
             subtasks, _ = run_confirmation_loop(
                 args.task,
                 cwd=Path.cwd(),
-                codex_bin=args.codex_bin,
+                codex_bin=codex_bin,
                 runner=run_command,
             )
             dispatches = dispatch_subtasks(
                 subtasks,
                 cwd=Path.cwd(),
                 client=client,
-                repo=args.repo,
+                repo=repo,
             )
             outcome = PipelineOutcome(
                 task=args.task,
