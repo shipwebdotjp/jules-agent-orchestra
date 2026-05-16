@@ -76,15 +76,15 @@ def prompt_for_review(
 ) -> str | None:
     while True:
         try:
-            answer = input_func("Approve this plan? [ok/ng]: ").strip().lower()
+            answer = input_func("Approve this plan? [y/n]: ").strip().lower()
         except EOFError as exc:
             raise PipelineError(
                 "Confirmation mode needs interactive input. Re-run with --no-confirm to skip it."
             ) from exc
 
-        if answer in {"", "ok", "o", "y", "yes"}:
+        if answer in {"", "y", "yes"}:
             return None
-        if answer in {"ng", "n", "no"}:
+        if answer in {"n", "no"}:
             try:
                 feedback = input_func("Feedback for revision: ").strip()
             except EOFError as exc:
@@ -95,7 +95,7 @@ def prompt_for_review(
                 return feedback
             output("Feedback cannot be empty.")
             continue
-        output("Please answer with ok or ng.")
+        output("Please answer with y or n.")
 
 
 def run_confirmation_loop(

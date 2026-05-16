@@ -39,7 +39,7 @@ class CliTests(unittest.TestCase):
         ]
         outputs: list[str] = []
         calls: list[list[str]] = []
-        prompts = iter(["ng", "Add tests", "ok"])
+        prompts = iter(["n", "Add tests", "y"])
         call_count = 0
 
         def input_func(prompt: str) -> str:
