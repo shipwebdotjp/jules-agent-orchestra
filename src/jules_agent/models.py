@@ -15,3 +15,5 @@ class DispatchResult:
     subtask: Subtask
     session_id: str | None
     raw_output: str
+    returncode: int
+    error_message: str | None = None

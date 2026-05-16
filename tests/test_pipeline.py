@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jules_agent.pipeline import (
-    PipelineError,
+    codex_schema,
     decompose_task,
     dispatch_subtasks,
     extract_session_id,
@@ -53,9 +53,28 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(subtasks[0].details, "Do the first thing.")
         self.assertEqual(subtasks[1].title, "Beta")
 
+    def test_codex_schema_closes_subtask_objects(self) -> None:
+        schema = codex_schema()
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(
+            schema["properties"]["subtasks"]["items"]["required"],
+            ["title"],
+        )
+        self.assertFalse(
+            schema["properties"]["subtasks"]["items"]["additionalProperties"]
+        )
+        self.assertEqual(
+            set(schema["properties"]["subtasks"]["items"]["properties"].keys()),
+            {"title"},
+        )
+
     def test_extract_session_id_prefers_session_pattern(self) -> None:
         output = "Created session 123456 for your task."
         self.assertEqual(extract_session_id(output), "123456")
+
+    def test_extract_session_id_accepts_alphanumeric_session_ids(self) -> None:
+        output = "Created session abc123-def for your task."
+        self.assertEqual(extract_session_id(output), "abc123-def")
 
     def test_decompose_task_invokes_codex(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -139,12 +158,16 @@ class PipelineTests(unittest.TestCase):
             return responses.pop(0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            with self.assertRaises(PipelineError):
-                run_pipeline(
-                    "task",
-                    cwd=Path(tmpdir),
-                    runner=runner,
-                )
+            outcome = run_pipeline(
+                "task",
+                cwd=Path(tmpdir),
+                repo="example-org/example-repo",
+                runner=runner,
+            )
+
+        self.assertEqual(len(outcome.dispatches), 1)
+        self.assertEqual(outcome.dispatches[0].returncode, 1)
+        self.assertIsNotNone(outcome.dispatches[0].error_message)
 
 
 if __name__ == "__main__":

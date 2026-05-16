@@ -67,11 +67,9 @@ def codex_schema() -> dict[str, object]:
                 "minItems": 1,
                 "items": {
                     "type": "object",
-                    "additionalProperties": True,
+                    "additionalProperties": False,
                     "properties": {
                         "title": {"type": "string", "minLength": 1},
-                        "details": {"type": "string"},
-                        "description": {"type": "string"},
                     },
                     "required": ["title"],
                 },
@@ -208,7 +206,18 @@ def format_subtask_for_jules(subtask: Subtask) -> str:
 
 def extract_session_id(output: str) -> str | None:
     session_patterns = [
-        re.compile(r"\bsession(?:\s+id)?\s*[:#]?\s*(\d{4,})\b", re.IGNORECASE),
+        re.compile(
+            r"\bsession(?:\s+id)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9_-]{3,})\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bcreated\s+session\s+([A-Za-z0-9][A-Za-z0-9_-]{3,})\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bsession\s+([A-Za-z0-9][A-Za-z0-9_-]{3,})\b",
+            re.IGNORECASE,
+        ),
         re.compile(r"\b(\d{5,})\b"),
     ]
     for pattern in session_patterns:
@@ -237,23 +246,27 @@ def dispatch_subtasks(
         combined_output = "\n".join(
             piece for piece in (completed.stdout, completed.stderr) if piece
         ).strip()
-
-        if completed.returncode != 0:
-            raise PipelineError(
-                f"Jules failed on subtask {index}.\n"
-                f"Command: {' '.join(args)}\n"
-                f"stdout:\n{completed.stdout}\n"
-                f"stderr:\n{completed.stderr}"
-            )
-
         results.append(
             DispatchResult(
                 index=index,
                 subtask=subtask,
                 session_id=extract_session_id(combined_output),
                 raw_output=combined_output,
+                returncode=completed.returncode,
+                error_message=(
+                    None
+                    if completed.returncode == 0
+                    else (
+                        f"Jules failed on subtask {index}.\n"
+                        f"Command: {' '.join(args)}\n"
+                        f"stdout:\n{completed.stdout}\n"
+                        f"stderr:\n{completed.stderr}"
+                    )
+                ),
             )
         )
+        if completed.returncode != 0:
+            break
     return results
 
 
