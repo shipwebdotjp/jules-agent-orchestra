@@ -66,7 +66,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # status
-    subparsers.add_parser("status", help="Show local state")
+    status_parser = subparsers.add_parser("status", help="Show local state")
+    status_parser.add_argument(
+        "--show-activities",
+        action="store_true",
+        help="Show session activities",
+    )
 
     # sync
     subparsers.add_parser("sync", help="Sync with Jules API")
@@ -222,6 +227,11 @@ def sync_task(client: JulesClient, task: Task) -> bool:
         task.jules.state = session.get("state", task.jules.state)
         task.jules.update_time = session.get("updateTime", task.jules.update_time)
         task.jules.session_url = session.get("url", task.jules.session_url)
+
+        try:
+            task.jules.activities = list(client.list_activities(task.jules.session_name))
+        except Exception as e:
+            print(f"Warning: Failed to fetch activities for task {task.id}: {e}", file=sys.stderr)
 
         has_pr = False
         outputs = session.get("outputs", [])
@@ -381,6 +391,8 @@ def main(argv: list[str] | None = None) -> int:
                 print("No runs found.")
                 return 0
 
+            from .pipeline import format_activities
+
             for run in reversed(state.runs):
                 print(f"Run: {run.id} [{run.status}] - {run.original_task}")
                 for task in run.tasks:
@@ -390,6 +402,11 @@ def main(argv: list[str] | None = None) -> int:
                     if task.pull_request:
                         status_str += f" -> PR: {task.pull_request.url}"
                     print(status_str)
+
+                    if args.show_activities and task.jules and task.jules.activities:
+                        formatted = format_activities(task.jules.activities)
+                        for line in formatted.splitlines():
+                            print(f"    {line}")
                 print()
 
         elif args.command == "sync":

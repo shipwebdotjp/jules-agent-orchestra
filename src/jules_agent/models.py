@@ -51,6 +51,7 @@ class JulesSessionInfo:
     session_url: str | None = None
     create_time: str | None = None
     update_time: str | None = None
+    activities: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -60,6 +61,7 @@ class JulesSessionInfo:
             "state": self.state,
             "create_time": self.create_time,
             "update_time": self.update_time,
+            "activities": self.activities,
         }
 
     @classmethod
@@ -71,6 +73,7 @@ class JulesSessionInfo:
             session_url=data.get("session_url"),
             create_time=data.get("create_time"),
             update_time=data.get("update_time"),
+            activities=data.get("activities", []),
         )
 
 

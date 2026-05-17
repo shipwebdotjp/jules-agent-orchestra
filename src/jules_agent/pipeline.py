@@ -357,6 +357,37 @@ def format_subtask_for_jules(subtask: Subtask) -> str:
     return subtask.title
 
 
+def format_activities(activities: list[dict[str, Any]]) -> str:
+    lines = []
+    for activity in activities:
+        timestamp = activity.get("createTime", "unknown time")
+        if "agentMessaged" in activity:
+            msg = activity["agentMessaged"].get("message", "")
+            lines.append(f"[{timestamp}] Jules: {msg}")
+        elif "userMessaged" in activity:
+            msg = activity["userMessaged"].get("message", "")
+            lines.append(f"[{timestamp}] User: {msg}")
+        elif "planGenerated" in activity:
+            plan = activity["planGenerated"].get("plan", {})
+            steps = plan.get("steps", [])
+            lines.append(f"[{timestamp}] Jules generated a plan with {len(steps)} steps.")
+            for i, step in enumerate(steps, 1):
+                description = step.get("description", "")
+                lines.append(f"  {i}. {description}")
+        elif "planApproved" in activity:
+            lines.append(f"[{timestamp}] Plan was approved.")
+        elif "progressUpdated" in activity:
+            description = activity["progressUpdated"].get("description", "")
+            lines.append(f"[{timestamp}] Progress: {description}")
+        elif "sessionCompleted" in activity:
+            lines.append(f"[{timestamp}] Session completed successfully.")
+        elif "sessionFailed" in activity:
+            reason = activity["sessionFailed"].get("reason", "Unknown reason")
+            lines.append(f"[{timestamp}] Session failed: {reason}")
+
+    return "\n".join(lines)
+
+
 def find_source_name(client: JulesClient, repo: str) -> str:
     try:
         owner, name = repo.split("/", 1)

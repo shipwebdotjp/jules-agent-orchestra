@@ -88,6 +88,30 @@ class JulesClient:
 
         return response.json()
 
+    def list_activities(self, session_name: str) -> Iterable[dict[str, Any]]:
+        url = f"{self.base_url}/{session_name}/activities"
+        params: dict[str, Any] = {}
+
+        while True:
+            with httpx.Client() as client:
+                response = client.get(url, headers=self.headers, params=params)
+
+            if response.status_code != 200:
+                raise JulesAPIError(
+                    f"Failed to list activities: {response.text}",
+                    status_code=response.status_code,
+                    response_body=response.text,
+                )
+
+            data = response.json()
+            activities = data.get("activities", [])
+            yield from activities
+
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
+                break
+            params["pageToken"] = next_page_token
+
     def get_session(self, session_name: str) -> dict[str, Any]:
         url = f"{self.base_url}/{session_name}"
         with httpx.Client() as client:
