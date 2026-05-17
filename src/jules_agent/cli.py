@@ -202,7 +202,9 @@ def run_feedback_loop(
     feedback_history: list[str] = []
     while True:
         # Sync task status to get the latest state
-        sync_task(client, task)
+        if not sync_task(client, task):
+            output("Error: Failed to sync task state. Please check your connection and try again.")
+            return
 
         output("\nFetching suggestion from Codex...")
         is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
