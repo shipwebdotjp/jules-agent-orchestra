@@ -456,7 +456,19 @@ def suggest_reply(
 
     suggestion = payload.get("suggestion")
     explanation = payload.get("explanation")
-    approval_recommended = payload.get("approval_recommended", False)
+
+    if is_awaiting_plan_approval:
+        if "approval_recommended" not in payload:
+            raise PipelineError(
+                "Codex suggestion failed: 'approval_recommended' field is missing."
+            )
+        approval_recommended = payload["approval_recommended"]
+        if not isinstance(approval_recommended, bool):
+            raise PipelineError(
+                "Codex suggestion failed: 'approval_recommended' must be a boolean."
+            )
+    else:
+        approval_recommended = bool(payload.get("approval_recommended", False))
 
     if not isinstance(suggestion, str) or not suggestion.strip():
         raise PipelineError(
