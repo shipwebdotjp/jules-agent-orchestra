@@ -24,6 +24,7 @@ TaskStatus = Literal[
     "needs_fix",
     "waiting_human_review",
     "merged",
+    "pr_closed",
     "failed",
     "cancelled",
 ]

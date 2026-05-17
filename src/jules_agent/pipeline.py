@@ -156,8 +156,6 @@ def codex_schema() -> dict[str, object]:
                     "properties": {
                         "title": {"type": "string", "minLength": 1},
                         "details": {"type": "string"},
-                        "description": {"type": "string"},
-                        "body": {"type": "string"},
                         "acceptance_criteria": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -167,8 +165,6 @@ def codex_schema() -> dict[str, object]:
                     "required": [
                         "title",
                         "details",
-                        "description",
-                        "body",
                         "acceptance_criteria",
                         "out_of_scope",
                     ],
@@ -261,11 +257,7 @@ def _normalize_tasks(raw_items: object) -> list[Subtask]:
                 item.get("prompt"),
                 item.get("name"),
             )
-            details = _first_non_empty_text(
-                item.get("details"),
-                item.get("description"),
-                item.get("body"),
-            )
+            details = _first_non_empty_text(item.get("details"))
         else:
             raise PipelineError(f"Task {index} is not a string or object.")
 
@@ -369,9 +361,22 @@ def decompose_task(
 
 
 def format_subtask_for_jules(subtask: Subtask) -> str:
+    parts: list[str] = [subtask.title]
+
     if subtask.details:
-        return f"{subtask.title}\n\nDetails:\n{subtask.details}"
-    return subtask.title
+        parts.extend(["", "Details:", subtask.details])
+
+    if subtask.acceptance_criteria:
+        parts.append("")
+        parts.append("Acceptance criteria:")
+        parts.extend(f"- {item}" for item in subtask.acceptance_criteria)
+
+    if subtask.out_of_scope:
+        parts.append("")
+        parts.append("Out of scope:")
+        parts.extend(f"- {item}" for item in subtask.out_of_scope)
+
+    return "\n".join(parts)
 
 
 def build_suggestion_prompt(

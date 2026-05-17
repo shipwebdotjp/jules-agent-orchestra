@@ -4,9 +4,11 @@ import argparse
 import os
 import sys
 import datetime
+import re
 from pathlib import Path
 from typing import Sequence
 
+from .github import GitHubClient
 from .client import JulesClient
 from .config import load_config
 from .models import (
@@ -14,6 +16,7 @@ from .models import (
     State,
     ProjectState,
     Run,
+    RunStatus,
     Task,
     JulesSessionInfo,
     PullRequestInfo,
@@ -119,9 +122,10 @@ def render_plan(plan: ExecutionPlan, *, output=print) -> None:
     output(f"Proposed strategy: {plan.strategy}")
     output("Proposed tasks:")
     for index, task in enumerate(plan.tasks, start=1):
-        output(f"{index}. {task.title}")
-        if task.details:
-            output(f"   Details: {task.details}")
+        rendered_lines = format_subtask_for_jules(task).splitlines()
+        output(f"{index}. {rendered_lines[0]}")
+        for line in rendered_lines[1:]:
+            output(f"   {line}" if line else "")
 
 
 def prompt_for_review(
@@ -291,6 +295,88 @@ def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
         return candidates[0]
 
 
+PULL_REQUEST_NUMBER_RE = re.compile(r"/pulls?/(\d+)(?:[/?#]|$)")
+
+
+def extract_pull_request_number(url: str | None) -> int | None:
+    if not url:
+        return None
+
+    match = PULL_REQUEST_NUMBER_RE.search(url)
+    if not match:
+        return None
+
+    return int(match.group(1))
+
+
+def sync_pr_created_task(
+    github_client: GitHubClient,
+    repo: str,
+    task: Task,
+) -> bool:
+    if not task.pull_request or not task.pull_request.url:
+        print(
+            f"Warning: Task {task.id} is pr_created but has no pull request URL.",
+            file=sys.stderr,
+        )
+        return False
+
+    pull_number = extract_pull_request_number(task.pull_request.url)
+    if pull_number is None:
+        print(
+            "Warning: Could not parse pull request number from "
+            f"{task.pull_request.url!r} for task {task.id}.",
+            file=sys.stderr,
+        )
+        return False
+
+    try:
+        pull_request = github_client.get_pull_request(repo, pull_number)
+    except Exception as exc:
+        print(
+            f"Warning: Failed to fetch PR details for task {task.id}: {exc}",
+            file=sys.stderr,
+        )
+        return False
+
+    state = pull_request.get("state")
+    if state == "open":
+        return False
+
+    if state == "closed":
+        task.status = "merged" if pull_request.get("merged_at") else "pr_closed"
+        task.updated_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        return True
+
+    print(
+        f"Warning: Unexpected PR state {state!r} for task {task.id}.",
+        file=sys.stderr,
+    )
+    return False
+
+
+def get_run_sync_status(
+    run: Run,
+    *,
+    previous_status: RunStatus,
+    reopened_from_completed: bool,
+) -> RunStatus:
+    if any(t.status in ("failed", "pr_closed") for t in run.tasks):
+        return "failed"
+
+    if all(t.status in ("completed", "merged") for t in run.tasks):
+        return "completed"
+
+    if reopened_from_completed:
+        return "running"
+
+    return previous_status
+
+
 def get_jules_state_mapping(jules_state: str, has_pr: bool) -> str:
     mapping = {
         "QUEUED": "dispatched",
@@ -365,6 +451,7 @@ def main(argv: list[str] | None = None) -> int:
     base_url = config.base_url
 
     client = JulesClient(api_key=api_key, base_url=base_url)
+    github_client = GitHubClient(token=github_token) if github_token else None
     cwd = Path.cwd()
 
     if args.command is None:
@@ -501,32 +588,62 @@ def main(argv: list[str] | None = None) -> int:
 
         elif args.command == "sync":
             updated_count = 0
+            if github_client is None and any(
+                task.status == "pr_created"
+                for run in state.runs
+                for task in run.tasks
+            ):
+                print(
+                    "Warning: GITHUB_TOKEN is not set; skipping PR status checks.",
+                    file=sys.stderr,
+                )
+
             for run in state.runs:
-                if run.status in ("running", "planned", "failed"):
-                    run_updated = False
+                has_pr_created_tasks = any(
+                    task.status == "pr_created" for task in run.tasks
+                )
+                should_sync_run = run.status in ("running", "planned", "failed")
+                if github_client and has_pr_created_tasks and run.status == "completed":
+                    should_sync_run = True
+
+                if should_sync_run:
+                    previous_status = run.status
+                    reopened_from_completed = (
+                        github_client is not None
+                        and previous_status == "completed"
+                        and has_pr_created_tasks
+                    )
+                    run_updated = reopened_from_completed
+
                     for task in run.tasks:
                         # print(f"Syncing task {task.id} - {task.title} [{task.status}]...")
+                        if task.status == "pr_created":
+                            if github_client and sync_pr_created_task(
+                                github_client,
+                                state.project.repo,
+                                task,
+                            ):
+                                updated_count += 1
+                                run_updated = True
+                            continue
+
                         if task.status not in (
                             "completed",
-                            "pr_created",
                             "merged",
                             "failed",
                             "cancelled",
+                            "pr_closed",
                         ):
                             if sync_task(client, task):
                                 updated_count += 1
                                 run_updated = True
 
                     if run_updated:
-                        # Update run status if all tasks are done
-                        if all(
-                            t.status in ("completed", "pr_created", "merged")
-                            for t in run.tasks
-                        ):
-                            run.status = "completed"
-                        elif any(t.status == "failed" for t in run.tasks):
-                            # This is a bit simple, might need better logic
-                            pass
+                        run.status = get_run_sync_status(
+                            run,
+                            previous_status=previous_status,
+                            reopened_from_completed=reopened_from_completed,
+                        )
                         run.updated_at = (
                             datetime.datetime.now(datetime.timezone.utc)
                             .isoformat()

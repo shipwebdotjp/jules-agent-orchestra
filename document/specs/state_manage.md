@@ -447,6 +447,7 @@ reviewing
 needs_fix
 waiting_human_review
 merged
+pr_closed
 failed
 cancelled
 ```
@@ -472,6 +473,7 @@ cancelled
 | `needs_fix` | 修正が必要 |
 | `waiting_human_review` | 人間レビュー待ち |
 | `merged` | PR merge済み |
+| `pr_closed` | PR closed済み、未merge |
 | `failed` | 失敗 |
 | `cancelled` | 中止 |
 
@@ -493,6 +495,8 @@ Jules API の `Session.state` を CLI 側の Task status に反映する。
 | `COMPLETED` | `completed` または `pr_created` |
 
 `COMPLETED` の場合、Session output に Pull Request が含まれていれば `pr_created` とする。
+
+`pr_created` の task は、sync 時に GitHub PR 詳細を確認し、`merged_at` があれば `merged`、`state=closed` かつ未mergeであれば `pr_closed` に更新する。
 
 ```text
 COMPLETED + PR outputあり

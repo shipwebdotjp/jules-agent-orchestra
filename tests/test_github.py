@@ -62,6 +62,30 @@ def test_is_pull_request_merged_false():
     assert client.is_pull_request_merged(repo, pull_number) is False
 
 @respx.mock
+def test_get_pull_request_success():
+    client = GitHubClient(token="test-token")
+    repo = "owner/repo"
+    pull_number = 456
+
+    route = respx.get(f"https://api.github.com/repos/{repo}/pulls/{pull_number}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "number": pull_number,
+                "state": "closed",
+                "merged_at": "2026-05-17T00:00:00Z",
+            },
+        )
+    )
+
+    pull_request = client.get_pull_request(repo, pull_number)
+
+    assert pull_request["number"] == pull_number
+    assert pull_request["state"] == "closed"
+    assert pull_request["merged_at"] == "2026-05-17T00:00:00Z"
+    assert route.called
+
+@respx.mock
 def test_merge_pull_request_success():
     client = GitHubClient(token="test-token")
     repo = "owner/repo"

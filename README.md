@@ -53,11 +53,18 @@ Optional flags:
 
 Settings in the configuration file have lower priority than environment variables and command-line flags.
 
+### GitHub Token
+
+`jules-agent` reads `GITHUB_TOKEN` from the environment, or `github_token` from the TOML configuration file.
+
+The current `sync` command uses this token to fetch PR details and check whether `pr_created` tasks have been merged, so `pull-requests: read` is enough for that path. If you also want the GitHub client helper that posts issue comments to work, add `issues: write`. If you plan to use the merge helper, add `contents: write`, which is the permission GitHub requires for the merge endpoint. When using the workflow-provided `GITHUB_TOKEN` in GitHub Actions, set the permissions in the job's `permissions` block.
+
 ### Supported Settings
 
 ```toml
 api_key = "your-jules-api-key"
 repo = "owner/repo"
+github_token = "ghp_your-github-token"
 codex_bin = "codex"
 base_url = "https://jules.googleapis.com/v1alpha"
 ```

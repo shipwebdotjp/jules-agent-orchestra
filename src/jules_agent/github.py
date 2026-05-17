@@ -47,6 +47,17 @@ class GitHubClient:
             )
         return response.json()
 
+    def get_pull_request(self, repo: str, pull_number: int) -> dict[str, Any]:
+        path = f"/repos/{repo}/pulls/{pull_number}"
+        response = self._request("GET", path)
+        if response.status_code != 200:
+            raise GitHubAPIError(
+                f"Failed to get PR details: {response.text}",
+                status_code=response.status_code,
+                response_body=response.text,
+            )
+        return response.json()
+
     def is_pull_request_merged(self, repo: str, pull_number: int) -> bool:
         path = f"/repos/{repo}/pulls/{pull_number}/merge"
         response = self._request("GET", path)

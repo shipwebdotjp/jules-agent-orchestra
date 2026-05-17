@@ -35,12 +35,35 @@ class PipelineTests(unittest.TestCase):
         plan = normalize_plan(
             {
                 "strategy": "single_session",
-                "tasks": [{"title": "Alpha", "details": "Do the first thing."}],
+                "tasks": [
+                    {
+                        "title": "Alpha",
+                        "details": "Do the first thing.",
+                        "description": "Legacy description should be ignored.",
+                        "body": "Legacy body should be ignored.",
+                    }
+                ],
             }
         )
         self.assertEqual(plan.strategy, "single_session")
         self.assertEqual(plan.tasks[0].title, "Alpha")
         self.assertEqual(plan.tasks[0].details, "Do the first thing.")
+
+    def test_normalize_plan_ignores_legacy_text_aliases(self) -> None:
+        plan = normalize_plan(
+            {
+                "strategy": "single_session",
+                "tasks": [
+                    {
+                        "title": "Alpha",
+                        "description": "Legacy description should be ignored.",
+                        "body": "Legacy body should be ignored.",
+                    }
+                ],
+            }
+        )
+        self.assertEqual(plan.strategy, "single_session")
+        self.assertIsNone(plan.tasks[0].details)
 
     def test_normalize_subtasks_accepts_legacy_payloads(self) -> None:
         subtasks = normalize_subtasks(
@@ -67,8 +90,6 @@ class PipelineTests(unittest.TestCase):
             [
                 "title",
                 "details",
-                "description",
-                "body",
                 "acceptance_criteria",
                 "out_of_scope",
             ],
@@ -79,8 +100,6 @@ class PipelineTests(unittest.TestCase):
             {
                 "title",
                 "details",
-                "description",
-                "body",
                 "acceptance_criteria",
                 "out_of_scope",
             },
