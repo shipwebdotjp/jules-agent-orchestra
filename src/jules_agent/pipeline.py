@@ -7,7 +7,7 @@ import tempfile
 import datetime
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from .client import JulesAPIError, JulesClient
 from .models import (
@@ -334,9 +334,10 @@ def call_codex(
 
         completed = runner(args, cwd=cwd)
         if completed.returncode != 0:
+            sanitized_args = list(args[:-1]) + ["<REDACTED_PROMPT>"]
             raise PipelineError(
                 "Codex call failed.\n"
-                f"Command: {' '.join(args)}\n"
+                f"Command: {' '.join(sanitized_args)}\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
             )
@@ -427,11 +428,21 @@ def suggest_reply(
         codex_bin=codex_bin,
         runner=runner,
     )
-    if not isinstance(payload, dict) or "suggestion" not in payload:
-        raise PipelineError("Codex suggestion failed to return a valid payload.")
+
+    if not isinstance(payload, dict):
+        raise PipelineError("Codex suggestion failed: payload is not a dictionary.")
+
+    suggestion = payload.get("suggestion")
+    explanation = payload.get("explanation")
+
+    if not isinstance(suggestion, str) or not suggestion.strip():
+        raise PipelineError("Codex suggestion failed: 'suggestion' must be a non-empty string.")
+    if not isinstance(explanation, str):
+        raise PipelineError("Codex suggestion failed: 'explanation' must be a string.")
+
     return {
-        "suggestion": str(payload.get("suggestion", "")),
-        "explanation": str(payload.get("explanation", "")),
+        "suggestion": suggestion.strip(),
+        "explanation": explanation,
     }
 
 

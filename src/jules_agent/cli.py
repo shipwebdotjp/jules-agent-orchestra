@@ -244,8 +244,14 @@ def run_feedback_loop(
                 output("Feedback cannot be empty.")
             elif answer == "m":
                 try:
-                    output("Enter your message to Jules (Ctrl-D to finish):")
-                    message = sys.stdin.read().strip()
+                    output("Enter your message to Jules (Enter a blank line to finish):")
+                    lines = []
+                    while True:
+                        line = input_func("> ")
+                        if not line:
+                            break
+                        lines.append(line)
+                    message = "\n".join(lines).strip()
                 except EOFError as exc:
                     raise PipelineError("Manual message input was closed.") from exc
                 if message:
