@@ -32,6 +32,7 @@ from .pipeline import (
     find_source_name,
     get_git_branch,
     format_subtask_for_jules,
+    suggest_reply,
 )
 
 
@@ -84,6 +85,12 @@ def build_parser() -> argparse.ArgumentParser:
     send_parser = subparsers.add_parser("send", help="Send a message to a task")
     send_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
     send_parser.add_argument("message", help="Message to send")
+
+    # feedback
+    feedback_parser = subparsers.add_parser(
+        "feedback", help="Interactive feedback loop for a task"
+    )
+    feedback_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
 
     # next
     subparsers.add_parser("next", help="Dispatch next task in sequential run")
@@ -173,6 +180,81 @@ def run_confirmation_loop(
 
         feedback_history.append(feedback)
         output("Revising plan with feedback...")
+
+
+def run_feedback_loop(
+    task: Task,
+    *,
+    cwd: Path,
+    client: JulesClient,
+    codex_bin: str,
+    runner: CommandRunner = run_command,
+    input_func=input,
+    output=print,
+) -> None:
+    if not task.jules:
+        raise PipelineError("Task has no Jules session info.")
+
+    feedback_history: list[str] = []
+    while True:
+        output("\nFetching suggestion from Codex...")
+        activities = list(client.list_activities(task.jules.session_name))
+        result = suggest_reply(
+            task.prompt or task.title,
+            activities,
+            feedback_history,
+            cwd=cwd,
+            codex_bin=codex_bin,
+            runner=runner,
+        )
+        suggestion = result["suggestion"]
+        explanation = result["explanation"]
+
+        output("-" * 40)
+        output(f"Explanation: {explanation}")
+        output("-" * 40)
+        output(f"Suggested message:\n{suggestion}")
+        output("-" * 40)
+
+        while True:
+            try:
+                answer = (
+                    input_func(
+                        "\nApprove suggestion (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
+                    )
+                    .strip()
+                    .lower()
+                )
+            except EOFError as exc:
+                raise PipelineError("Feedback loop needs interactive input.") from exc
+
+            if answer in {"y", "yes"}:
+                output("Sending suggestion to Jules...")
+                client.send_message(task.jules.session_name, suggestion)
+                return
+            elif answer == "f":
+                try:
+                    feedback = input_func("Feedback for revision: ").strip()
+                except EOFError as exc:
+                    raise PipelineError("Feedback input was closed.") from exc
+                if feedback:
+                    feedback_history.append(feedback)
+                    output("Revising suggestion...")
+                    break
+                output("Feedback cannot be empty.")
+            elif answer == "m":
+                try:
+                    output("Enter your message to Jules (Ctrl-D to finish):")
+                    message = sys.stdin.read().strip()
+                except EOFError as exc:
+                    raise PipelineError("Manual message input was closed.") from exc
+                if message:
+                    output("Sending manual message to Jules...")
+                    client.send_message(task.jules.session_name, message)
+                    return
+                output("Message cannot be empty.")
+            else:
+                output("Please answer with y, f, or m.")
 
 
 def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
@@ -458,6 +540,27 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Approving plan for task {args.task_id}...")
             client.approve_plan(task.jules.session_name)
             task.status = "plan_approved"
+            task.updated_at = (
+                datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+            save_state(cwd, state)
+            print("Done.")
+
+        elif args.command == "feedback":
+            run, task = resolve_task(state, args.task_id)
+            if not task.jules:
+                parser.exit(
+                    1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
+                )
+
+            run_feedback_loop(
+                task,
+                cwd=cwd,
+                client=client,
+                codex_bin=codex_bin,
+            )
             task.updated_at = (
                 datetime.datetime.now(datetime.timezone.utc)
                 .isoformat()

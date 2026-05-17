@@ -305,20 +305,19 @@ def _first_non_empty_text(*values: object) -> str | None:
     return None
 
 
-def decompose_task(
-    task: str,
+def call_codex(
+    prompt: str,
+    schema: dict[str, object],
     *,
     cwd: Path,
     codex_bin: str = "codex",
     runner: CommandRunner = run_command,
-) -> ExecutionPlan:
-    prompt = build_codex_prompt(task)
-
+) -> object:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         schema_path = tmpdir_path / "codex-schema.json"
         last_message_path = tmpdir_path / "codex-last-message.txt"
-        schema_path.write_text(json.dumps(codex_schema(), indent=2), encoding="utf-8")
+        schema_path.write_text(json.dumps(schema, indent=2), encoding="utf-8")
 
         args = [
             codex_bin,
@@ -336,7 +335,7 @@ def decompose_task(
         completed = runner(args, cwd=cwd)
         if completed.returncode != 0:
             raise PipelineError(
-                "Codex decomposition failed.\n"
+                "Codex call failed.\n"
                 f"Command: {' '.join(args)}\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
@@ -347,14 +346,93 @@ def decompose_task(
             response_text = last_message_path.read_text(encoding="utf-8").strip()
         if not response_text:
             response_text = (completed.stdout or "").strip()
-        payload = parse_json_document(response_text)
-        return normalize_plan(payload)
+        return parse_json_document(response_text)
+
+
+def decompose_task(
+    task: str,
+    *,
+    cwd: Path,
+    codex_bin: str = "codex",
+    runner: CommandRunner = run_command,
+) -> ExecutionPlan:
+    prompt = build_codex_prompt(task)
+    payload = call_codex(
+        prompt,
+        codex_schema(),
+        cwd=cwd,
+        codex_bin=codex_bin,
+        runner=runner,
+    )
+    return normalize_plan(payload)
 
 
 def format_subtask_for_jules(subtask: Subtask) -> str:
     if subtask.details:
         return f"{subtask.title}\n\nDetails:\n{subtask.details}"
     return subtask.title
+
+
+def build_suggestion_prompt(
+    task_description: str, activities_formatted: str, feedback_history: list[str]
+) -> str:
+    prompt = (
+        "You are an assistant helping a user provide feedback to Jules, an AI software engineer.\n"
+        "Jules is working on the following task:\n"
+        f"{task_description}\n\n"
+        "Here is the activity history of the Jules session:\n"
+        f"{activities_formatted}\n\n"
+    )
+    if feedback_history:
+        prompt += "The user has provided the following feedback on your previous suggestions:\n"
+        for i, feedback in enumerate(feedback_history, start=1):
+            prompt += f"{i}. {feedback}\n"
+        prompt += "\nPlease provide a revised suggestion that addresses this feedback.\n"
+    else:
+        prompt += "Based on the activity history, suggest a message for the user to send to Jules to move the task forward.\n"
+
+    prompt += "\nReturn your suggestion in JSON format."
+    return prompt
+
+
+def suggestion_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "suggestion": {"type": "string", "minLength": 1},
+            "explanation": {"type": "string"},
+        },
+        "required": ["suggestion", "explanation"],
+    }
+
+
+def suggest_reply(
+    task_description: str,
+    activities: list[dict[str, Any]],
+    feedback_history: list[str],
+    *,
+    cwd: Path,
+    codex_bin: str = "codex",
+    runner: CommandRunner = run_command,
+) -> dict[str, str]:
+    activities_formatted = format_activities(activities)
+    prompt = build_suggestion_prompt(
+        task_description, activities_formatted, feedback_history
+    )
+    payload = call_codex(
+        prompt,
+        suggestion_schema(),
+        cwd=cwd,
+        codex_bin=codex_bin,
+        runner=runner,
+    )
+    if not isinstance(payload, dict) or "suggestion" not in payload:
+        raise PipelineError("Codex suggestion failed to return a valid payload.")
+    return {
+        "suggestion": str(payload.get("suggestion", "")),
+        "explanation": str(payload.get("explanation", "")),
+    }
 
 
 def format_activities(activities: list[dict[str, Any]]) -> str:
