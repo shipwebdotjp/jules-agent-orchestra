@@ -95,3 +95,16 @@ def test_merge_pull_request_error():
 
     assert excinfo.value.status_code == 405
     assert "not mergeable" in str(excinfo.value)
+
+@respx.mock
+def test_request_network_error():
+    client = GitHubClient(token="test-token")
+    respx.get(f"https://api.github.com/repos/owner/repo/pulls/1/merge").mock(
+        side_effect=httpx.NetworkError("Network issue")
+    )
+
+    with pytest.raises(GitHubAPIError) as excinfo:
+        client.is_pull_request_merged("owner/repo", 1)
+
+    assert "HTTP request failed" in str(excinfo.value)
+    assert "Network issue" in str(excinfo.value)

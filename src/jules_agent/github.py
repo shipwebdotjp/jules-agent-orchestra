@@ -29,9 +29,12 @@ class GitHubClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         url = f"{self.base_url}/{path.lstrip('/')}"
-        with httpx.Client() as client:
-            response = client.request(method, url, headers=self.headers, **kwargs)
-        return response
+        try:
+            with httpx.Client() as client:
+                response = client.request(method, url, headers=self.headers, **kwargs)
+            return response
+        except httpx.HTTPError as e:
+            raise GitHubAPIError(f"HTTP request failed: {e}") from e
 
     def post_issue_comment(self, repo: str, issue_number: int, body: str) -> dict[str, Any]:
         path = f"/repos/{repo}/issues/{issue_number}/comments"
