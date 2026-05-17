@@ -10,6 +10,7 @@ from typing import Any
 class Config:
     api_key: str | None = None
     repo: str | None = None
+    github_token: str | None = None
     codex_bin: str = "codex"
     base_url: str = "https://jules.googleapis.com/v1alpha"
 
@@ -18,6 +19,7 @@ class Config:
         return cls(
             api_key=data.get("api_key"),
             repo=data.get("repo"),
+            github_token=data.get("github_token"),
             codex_bin=data.get("codex_bin", "codex"),
             base_url=data.get("base_url", "https://jules.googleapis.com/v1alpha"),
         )

@@ -270,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
             "Error: JULES_API_KEY is not set in environment or configuration.\n",
         )
 
+    github_token = os.environ.get("GITHUB_TOKEN") or config.github_token
+
     repo = args.repo or config.repo
     codex_bin = args.codex_bin or config.codex_bin
     base_url = config.base_url
