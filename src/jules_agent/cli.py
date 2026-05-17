@@ -201,40 +201,52 @@ def run_feedback_loop(
 
     feedback_history: list[str] = []
     while True:
+        # Sync task status to get the latest state
+        sync_task(client, task)
+
         output("\nFetching suggestion from Codex...")
+        is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
         activities = list(client.list_activities(task.jules.session_name))
         result = suggest_reply(
             task.prompt or task.title,
             activities,
             feedback_history,
             cwd=cwd,
+            is_awaiting_plan_approval=is_awaiting_plan_approval,
             codex_bin=codex_bin,
             runner=runner,
         )
         suggestion = result["suggestion"]
         explanation = result["explanation"]
+        approval_recommended = result.get("approval_recommended", False)
 
         output("-" * 40)
         output(f"Explanation: {explanation}")
+        if is_awaiting_plan_approval:
+            rec_str = "YES" if approval_recommended else "NO"
+            output(f"Approval recommended: {rec_str}")
         output("-" * 40)
         output(f"Suggested message:\n{suggestion}")
         output("-" * 40)
 
         while True:
             try:
-                answer = (
-                    input_func(
-                        "\nApprove suggestion (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
-                    )
-                    .strip()
-                    .lower()
-                )
+                if is_awaiting_plan_approval and approval_recommended:
+                    prompt_msg = "\nApprove the plan as recommended? (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
+                else:
+                    prompt_msg = "\nApprove suggestion (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
+                answer = input_func(prompt_msg).strip().lower()
             except EOFError as exc:
                 raise PipelineError("Feedback loop needs interactive input.") from exc
 
             if answer in {"y", "yes"}:
-                output("Sending suggestion to Jules...")
-                client.send_message(task.jules.session_name, suggestion)
+                if is_awaiting_plan_approval and approval_recommended:
+                    output("Approving plan...")
+                    client.approve_plan(task.jules.session_name)
+                    task.status = "plan_approved"
+                else:
+                    output("Sending suggestion to Jules...")
+                    client.send_message(task.jules.session_name, suggestion)
                 return
             elif answer == "f":
                 try:

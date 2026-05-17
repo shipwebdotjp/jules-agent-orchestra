@@ -380,7 +380,10 @@ def format_subtask_for_jules(subtask: Subtask) -> str:
 
 
 def build_suggestion_prompt(
-    task_description: str, activities_formatted: str, feedback_history: list[str]
+    task_description: str,
+    activities_formatted: str,
+    feedback_history: list[str],
+    is_awaiting_plan_approval: bool = False,
 ) -> str:
     prompt = (
         "You are an assistant helping a user provide feedback to Jules, an AI software engineer.\n"
@@ -389,6 +392,15 @@ def build_suggestion_prompt(
         "Here is the activity history of the Jules session:\n"
         f"{activities_formatted}\n\n"
     )
+
+    if is_awaiting_plan_approval:
+        prompt += (
+            "The session is currently awaiting plan approval. "
+            "Please evaluate the generated plan. If it looks correct and ready to proceed, "
+            "set 'approval_recommended' to true. Otherwise, set it to false and provide "
+            "a suggestion to fix the plan.\n\n"
+        )
+
     if feedback_history:
         prompt += "The user has provided the following feedback on your previous suggestions:\n"
         for i, feedback in enumerate(feedback_history, start=1):
@@ -408,6 +420,7 @@ def suggestion_schema() -> dict[str, object]:
         "properties": {
             "suggestion": {"type": "string", "minLength": 1},
             "explanation": {"type": "string"},
+            "approval_recommended": {"type": "boolean"},
         },
         "required": ["suggestion", "explanation"],
     }
@@ -419,12 +432,16 @@ def suggest_reply(
     feedback_history: list[str],
     *,
     cwd: Path,
+    is_awaiting_plan_approval: bool = False,
     codex_bin: str = "codex",
     runner: CommandRunner = run_command,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     activities_formatted = format_activities(activities)
     prompt = build_suggestion_prompt(
-        task_description, activities_formatted, feedback_history
+        task_description,
+        activities_formatted,
+        feedback_history,
+        is_awaiting_plan_approval=is_awaiting_plan_approval,
     )
     payload = call_codex(
         prompt,
@@ -439,15 +456,19 @@ def suggest_reply(
 
     suggestion = payload.get("suggestion")
     explanation = payload.get("explanation")
+    approval_recommended = payload.get("approval_recommended", False)
 
     if not isinstance(suggestion, str) or not suggestion.strip():
-        raise PipelineError("Codex suggestion failed: 'suggestion' must be a non-empty string.")
+        raise PipelineError(
+            "Codex suggestion failed: 'suggestion' must be a non-empty string."
+        )
     if not isinstance(explanation, str):
         raise PipelineError("Codex suggestion failed: 'explanation' must be a string.")
 
     return {
         "suggestion": suggestion.strip(),
         "explanation": explanation,
+        "approval_recommended": bool(approval_recommended),
     }
 
 
