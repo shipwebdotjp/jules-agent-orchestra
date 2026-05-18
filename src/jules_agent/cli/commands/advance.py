@@ -66,25 +66,28 @@ def handle_advance(
         success = _handle_auto(target_task, state, client, github_client, cwd, config)
         if success:
             # Action taken automatically
-            if not sync_task(client, target_task):
+            if sync_task(client, target_task):
+                step_completed = True
+            else:
                 print(f"Failed to sync task {target_task.id} after auto action.")
-            step_completed = True
         else:
             # Codex didn't recommend action or it failed, try interactive fallback
             print(f"Auto-advance for {target_task.status} did not perform an action. Falling back to interactive mode.")
             if _handle_interactive(
                 target_task, state, client, github_client, cwd, config
             ):
-                if not sync_task(client, target_task):
+                if sync_task(client, target_task):
+                    step_completed = True
+                else:
                     print(f"Failed to sync task {target_task.id} after interactive action.")
-                step_completed = True
     else:
         if _handle_interactive(
             target_task, state, client, github_client, cwd, config
         ):
-            if not sync_task(client, target_task):
+            if sync_task(client, target_task):
+                step_completed = True
+            else:
                 print(f"Failed to sync task {target_task.id} after action.")
-            step_completed = True
 
     if step_completed:
         # Update updated_at and save state
