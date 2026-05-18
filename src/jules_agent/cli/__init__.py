@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from .commands import (
+    handle_advance,
     handle_approve,
     handle_feedback,
     handle_merge,
@@ -134,6 +135,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("next", help="Dispatch next task in sequential run")
 
+    advance_parser = subparsers.add_parser(
+        "advance", help="Automatically or interactively advance work"
+    )
+    advance_parser.add_argument(
+        "--auto",
+        action="store_const",
+        dest="advance_mode",
+        const="auto",
+        help="Run in automatic mode (auto-approve/auto-reply)",
+    )
+
     return parser
 
 
@@ -181,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "run":
             return handle_run(args, state, client, cwd, codex_bin)
+        elif args.command == "advance":
+            return handle_advance(args, state, client, github_client, cwd, config)
         elif args.command == "status":
             return handle_status(args, state)
         elif args.command == "sync":
