@@ -50,54 +50,46 @@ def handle_advance(
 
     print(f"\nAdvancing task: {target_task.id} - {target_task.title} (Status: {target_task.status})")
 
-    # 4. Guided loop
-    while target_task.status in ADVANCEABLE_STATUSES:
-        use_auto = False
-        if args.auto:
-            use_auto = True
-        elif target_task.status == "awaiting_plan_approval" and args.auto_plan_approval:
-            use_auto = True
-        elif target_task.status == "awaiting_user_feedback" and args.auto_feedback:
-            use_auto = True
-        elif target_task.status == "pr_created" and args.auto_merge:
-            use_auto = True
+    # 4. Guided step (at most one step)
+    use_auto = False
+    if args.auto:
+        use_auto = True
+    elif target_task.status == "awaiting_plan_approval" and args.auto_plan_approval:
+        use_auto = True
+    elif target_task.status == "awaiting_user_feedback" and args.auto_feedback:
+        use_auto = True
+    elif target_task.status == "pr_created" and args.auto_merge:
+        use_auto = True
 
-        if use_auto:
-            # Guard to stop repeated external writes by detecting no-status-change
-            prev_status = target_task.status
-            success = _handle_auto(target_task, state, client, github_client, cwd, config)
-            if success is None:  # User skipped in PR check
-                break
-
-            # Sync and check for status change
-            if not sync_task(client, target_task):
-                print("Failed to sync task after auto run.")
-                break
-
-            if not success or target_task.status == prev_status:
-                print(
-                    f"Auto-advance for {target_task.status} did not result in a status change. Falling back to interactive mode."
-                )
-                if not _handle_interactive(
-                    target_task, state, client, github_client, cwd, config
-                ):
-                    break
-                # Sync after interactive fallback
-                if not sync_task(client, target_task):
-                    print(f"Failed to sync task {target_task.id} after interactive fallback.")
-                    break
+    step_completed = False
+    if use_auto:
+        success = _handle_auto(target_task, state, client, github_client, cwd, config)
+        if success:
+            # Action taken automatically
+            if sync_task(client, target_task):
+                step_completed = True
+            else:
+                print(f"Failed to sync task {target_task.id} after auto action.")
         else:
-            if not _handle_interactive(
+            # Codex didn't recommend action or it failed, try interactive fallback
+            print(f"Auto-advance for {target_task.status} did not perform an action. Falling back to interactive mode.")
+            if _handle_interactive(
                 target_task, state, client, github_client, cwd, config
             ):
-                # User skipped or some other reason to stop the loop
-                break
-
-            # After an action, sync and see if we should continue the loop for THIS task
-            if not sync_task(client, target_task):
+                if sync_task(client, target_task):
+                    step_completed = True
+                else:
+                    print(f"Failed to sync task {target_task.id} after interactive action.")
+    else:
+        if _handle_interactive(
+            target_task, state, client, github_client, cwd, config
+        ):
+            if sync_task(client, target_task):
+                step_completed = True
+            else:
                 print(f"Failed to sync task {target_task.id} after action.")
-                break
 
+    if step_completed:
         # Update updated_at and save state
         target_task.updated_at = (
             datetime.datetime.now(datetime.timezone.utc)
