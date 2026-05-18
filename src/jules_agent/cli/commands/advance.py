@@ -82,6 +82,10 @@ def handle_advance(
                     target_task, state, client, github_client, cwd, config
                 ):
                     break
+                # Sync after interactive fallback
+                if not sync_task(client, target_task):
+                    print(f"Failed to sync task {target_task.id} after interactive fallback.")
+                    break
         else:
             if not _handle_interactive(
                 target_task, state, client, github_client, cwd, config
