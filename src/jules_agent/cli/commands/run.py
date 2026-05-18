@@ -116,7 +116,7 @@ def handle_run(
                 source_name=source_name,
                 starting_branch=starting_branch,
                 title=task.title,
-                require_plan_approval=False,
+                require_plan_approval=not args.auto_plan_approval,
                 automation_mode="AUTO_CREATE_PR",
             )
             task.jules = JulesSessionInfo(
