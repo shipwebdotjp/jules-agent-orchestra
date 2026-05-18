@@ -1,41 +1,47 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import sys
-import datetime
-import re
 from pathlib import Path
-from typing import Sequence
 
-from .github import GitHubClient
-from .client import JulesClient
-from .config import load_config
-from .models import (
+from .io import build_review_prompt, prompt_for_review, render_plan
+from .state import (
+    extract_pull_request_number,
+    get_jules_state_mapping,
+    get_run_sync_status,
+    resolve_task,
+    sync_pr_created_task,
+    sync_task,
+)
+from ..client import JulesClient
+from ..config import load_config
+from ..github import GitHubClient
+from ..models import (
     ExecutionPlan,
-    State,
+    JulesSessionInfo,
     ProjectState,
     Run,
-    RunStatus,
+    State,
     Task,
-    JulesSessionInfo,
-    PullRequestInfo,
 )
-from .pipeline import (
+from ..pipeline import (
     CommandRunner,
     PipelineError,
     decompose_task,
-    run_command,
-    validate_plan,
+    find_source_name,
+    format_activities,
+    format_subtask_for_jules,
+    generate_run_id,
+    get_git_branch,
     get_git_remote_repo,
     get_git_root,
     load_state,
+    run_command,
     save_state,
-    generate_run_id,
-    find_source_name,
-    get_git_branch,
-    format_subtask_for_jules,
     suggest_reply,
+    validate_plan,
 )
 
 
@@ -60,7 +66,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", help="Subcommands")
 
-    # run
     run_parser = subparsers.add_parser("run", help="Run a new task")
     run_parser.add_argument("task", help="Task description")
     run_parser.add_argument(
@@ -69,7 +74,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip the confirmation loop and dispatch immediately.",
     )
 
-    # status
     status_parser = subparsers.add_parser("status", help="Show local state")
     status_parser.add_argument(
         "--show-activities",
@@ -77,84 +81,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show session activities",
     )
 
-    # sync
     subparsers.add_parser("sync", help="Sync with Jules API")
 
-    # approve
     approve_parser = subparsers.add_parser("approve", help="Approve a task plan")
     approve_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
 
-    # send
     send_parser = subparsers.add_parser("send", help="Send a message to a task")
     send_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
     send_parser.add_argument("message", help="Message to send")
 
-    # feedback
     feedback_parser = subparsers.add_parser(
         "feedback", help="Interactive feedback loop for a task"
     )
     feedback_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
 
-    # next
     subparsers.add_parser("next", help="Dispatch next task in sequential run")
 
     return parser
-
-
-def build_review_prompt(task: str, feedback_history: list[str]) -> str:
-    prompt = task.strip()
-    if not feedback_history:
-        return prompt
-
-    feedback_lines = "\n".join(
-        f"{index}. {feedback}"
-        for index, feedback in enumerate(feedback_history, start=1)
-    )
-    return (
-        f"{prompt}\n\n"
-        "User feedback from the previous plan:\n"
-        f"{feedback_lines}\n\n"
-        "Revise the plan to address the feedback."
-    )
-
-
-def render_plan(plan: ExecutionPlan, *, output=print) -> None:
-    output(f"Proposed strategy: {plan.strategy}")
-    output("Proposed tasks:")
-    for index, task in enumerate(plan.tasks, start=1):
-        rendered_lines = format_subtask_for_jules(task).splitlines()
-        output(f"{index}. {rendered_lines[0]}")
-        for line in rendered_lines[1:]:
-            output(f"   {line}" if line else "")
-
-
-def prompt_for_review(
-    *,
-    input_func=input,
-    output=print,
-) -> str | None:
-    while True:
-        try:
-            answer = input_func("Approve this plan? [y/n]: ").strip().lower()
-        except EOFError as exc:
-            raise PipelineError(
-                "Confirmation mode needs interactive input. Re-run with --no-confirm to skip it."
-            ) from exc
-
-        if answer in {"", "y", "yes"}:
-            return None
-        if answer in {"n", "no"}:
-            try:
-                feedback = input_func("Feedback for revision: ").strip()
-            except EOFError as exc:
-                raise PipelineError(
-                    "Feedback input was closed. Re-run with --no-confirm to skip confirmation mode."
-                ) from exc
-            if feedback:
-                return feedback
-            output("Feedback cannot be empty.")
-            continue
-        output("Please answer with y or n.")
 
 
 def run_confirmation_loop(
@@ -201,9 +144,10 @@ def run_feedback_loop(
 
     feedback_history: list[str] = []
     while True:
-        # Sync task status to get the latest state
         if not sync_task(client, task):
-            output("Error: Failed to sync task state. Please check your connection and try again.")
+            output(
+                "Error: Failed to sync task state. Please check your connection and try again."
+            )
             return
 
         output("\nFetching suggestion from Codex...")
@@ -234,9 +178,13 @@ def run_feedback_loop(
         while True:
             try:
                 if is_awaiting_plan_approval and approval_recommended:
-                    prompt_msg = "\nApprove the plan as recommended? (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
+                    prompt_msg = (
+                        "\nApprove the plan as recommended? (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
+                    )
                 else:
-                    prompt_msg = "\nApprove suggestion (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
+                    prompt_msg = (
+                        "\nApprove suggestion (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
+                    )
                 answer = input_func(prompt_msg).strip().lower()
             except EOFError as exc:
                 raise PipelineError("Feedback loop needs interactive input.") from exc
@@ -281,170 +229,6 @@ def run_feedback_loop(
                 output("Please answer with y, f, or m.")
 
 
-def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
-    if ":" in task_id_arg:
-        run_id, task_id = task_id_arg.split(":", 1)
-        for run in state.runs:
-            if run.id == run_id:
-                for task in run.tasks:
-                    if task.id == task_id:
-                        return run, task
-        raise PipelineError(f"Task {task_id_arg} not found.")
-    else:
-        # Search for task_id across all runs
-        candidates: list[tuple[Run, Task]] = []
-        for run in state.runs:
-            for task in run.tasks:
-                if task.id == task_id_arg:
-                    candidates.append((run, task))
-
-        if not candidates:
-            raise PipelineError(f"Task {task_id_arg} not found.")
-        if len(candidates) > 1:
-            run_ids = ", ".join(r.id for r, t in candidates)
-            raise PipelineError(
-                f"Task {task_id_arg} is ambiguous. Found in runs: {run_ids}. "
-                "Please use RUN_ID:TASK_ID format."
-            )
-        return candidates[0]
-
-
-PULL_REQUEST_NUMBER_RE = re.compile(r"/pulls?/(\d+)(?:[/?#]|$)")
-
-
-def extract_pull_request_number(url: str | None) -> int | None:
-    if not url:
-        return None
-
-    match = PULL_REQUEST_NUMBER_RE.search(url)
-    if not match:
-        return None
-
-    return int(match.group(1))
-
-
-def sync_pr_created_task(
-    github_client: GitHubClient,
-    repo: str,
-    task: Task,
-) -> bool:
-    if not task.pull_request or not task.pull_request.url:
-        print(
-            f"Warning: Task {task.id} is pr_created but has no pull request URL.",
-            file=sys.stderr,
-        )
-        return False
-
-    pull_number = extract_pull_request_number(task.pull_request.url)
-    if pull_number is None:
-        print(
-            "Warning: Could not parse pull request number from "
-            f"{task.pull_request.url!r} for task {task.id}.",
-            file=sys.stderr,
-        )
-        return False
-
-    try:
-        pull_request = github_client.get_pull_request(repo, pull_number)
-    except Exception as exc:
-        print(
-            f"Warning: Failed to fetch PR details for task {task.id}: {exc}",
-            file=sys.stderr,
-        )
-        return False
-
-    state = pull_request.get("state")
-    if state == "open":
-        return False
-
-    if state == "closed":
-        task.status = "merged" if pull_request.get("merged_at") else "pr_closed"
-        task.updated_at = (
-            datetime.datetime.now(datetime.timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
-        return True
-
-    print(
-        f"Warning: Unexpected PR state {state!r} for task {task.id}.",
-        file=sys.stderr,
-    )
-    return False
-
-
-def get_run_sync_status(
-    run: Run,
-    *,
-    previous_status: RunStatus,
-    reopened_from_completed: bool,
-) -> RunStatus:
-    if any(t.status in ("failed", "pr_closed") for t in run.tasks):
-        return "failed"
-
-    if all(t.status in ("completed", "merged") for t in run.tasks):
-        return "completed"
-
-    if reopened_from_completed:
-        return "running"
-
-    return previous_status
-
-
-def get_jules_state_mapping(jules_state: str, has_pr: bool) -> str:
-    mapping = {
-        "QUEUED": "dispatched",
-        "PLANNING": "planning",
-        "AWAITING_PLAN_APPROVAL": "awaiting_plan_approval",
-        "AWAITING_USER_FEEDBACK": "awaiting_user_feedback",
-        "IN_PROGRESS": "in_progress",
-        "PAUSED": "paused",
-        "FAILED": "failed",
-    }
-    if jules_state == "COMPLETED":
-        return "pr_created" if has_pr else "completed"
-    return mapping.get(jules_state, "dispatched")
-
-
-def sync_task(client: JulesClient, task: Task) -> bool:
-    if not task.jules:
-        return False
-
-    try:
-        session = client.get_session(task.jules.session_name)
-        task.jules.state = session.get("state", task.jules.state)
-        task.jules.update_time = session.get("updateTime", task.jules.update_time)
-        task.jules.session_url = session.get("url", task.jules.session_url)
-
-        try:
-            task.jules.activities = list(client.list_activities(task.jules.session_name))
-        except Exception as e:
-            print(f"Warning: Failed to fetch activities for task {task.id}: {e}", file=sys.stderr)
-
-        has_pr = False
-        outputs = session.get("outputs", [])
-        for output in outputs:
-            pr = output.get("pullRequest")
-            if pr:
-                task.pull_request = PullRequestInfo(
-                    url=pr.get("url"),
-                    title=pr.get("title"),
-                    description=pr.get("description"),
-                )
-                has_pr = True
-
-        task.status = get_jules_state_mapping(task.jules.state, has_pr)  # type: ignore
-        task.updated_at = (
-            datetime.datetime.now(datetime.timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
-        return True
-    except Exception as e:
-        print(f"Failed to sync task {task.id}: {e}", file=sys.stderr)
-        return False
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -469,15 +253,12 @@ def main(argv: list[str] | None = None) -> int:
     cwd = Path.cwd()
 
     if args.command is None:
-        # Support legacy usage if possible, but let's encourage subcommands
-        # Actually, let's just show help if no command
         parser.print_help()
         return 0
 
     try:
         state = load_state(cwd)
         if state is None:
-            # Initialize state if not exists
             git_root = get_git_root(cwd)
             if repo is None:
                 repo_info = get_git_remote_repo(cwd)
@@ -493,7 +274,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "run":
             if args.no_confirm:
                 plan = decompose_task(args.task, cwd=cwd, codex_bin=codex_bin)
-                # validate_plan(plan) # Removed because we want to support sequential_subtasks now
             else:
                 plan = run_confirmation_loop(args.task, cwd=cwd, codex_bin=codex_bin)
 
@@ -530,12 +310,8 @@ def main(argv: list[str] | None = None) -> int:
             save_state(cwd, state)
             print(f"Plan saved. Run ID: {run_id}")
 
-            # Initial dispatch
             tasks_to_dispatch = []
-            if (
-                plan.strategy == "single_session"
-                or plan.strategy == "parallel_subtasks"
-            ):
+            if plan.strategy in ("single_session", "parallel_subtasks"):
                 tasks_to_dispatch = run.tasks
             elif plan.strategy == "sequential_subtasks":
                 tasks_to_dispatch = [run.tasks[0]]
@@ -564,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:
                         create_time=session.get("createTime"),
                         update_time=session.get("updateTime"),
                     )
-                    task.status = get_jules_state_mapping(task.jules.state, False)  # type: ignore
+                    task.status = get_jules_state_mapping(task.jules.state, False)
                     print(f"  Success: {task.jules.session_url}")
                 except Exception as e:
                     task.status = "failed"
@@ -581,8 +357,6 @@ def main(argv: list[str] | None = None) -> int:
             if not state.runs:
                 print("No runs found.")
                 return 0
-
-            from .pipeline import format_activities
 
             for run in reversed(state.runs):
                 print(f"Run: {run.id} [{run.status}] - {run.original_task}")
@@ -630,7 +404,6 @@ def main(argv: list[str] | None = None) -> int:
                     run_updated = reopened_from_completed
 
                     for task in run.tasks:
-                        # print(f"Syncing task {task.id} - {task.title} [{task.status}]...")
                         if task.status == "pr_created":
                             if github_client and sync_pr_created_task(
                                 github_client,
@@ -668,7 +441,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Synced {updated_count} tasks.")
 
         elif args.command == "approve":
-            run, task = resolve_task(state, args.task_id)
+            _run, task = resolve_task(state, args.task_id)
             if not task.jules:
                 parser.exit(
                     1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
@@ -686,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Done.")
 
         elif args.command == "feedback":
-            run, task = resolve_task(state, args.task_id)
+            _run, task = resolve_task(state, args.task_id)
             if not task.jules:
                 parser.exit(
                     1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
@@ -707,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Done.")
 
         elif args.command == "send":
-            run, task = resolve_task(state, args.task_id)
+            _run, task = resolve_task(state, args.task_id)
             if not task.jules:
                 parser.exit(
                     1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
@@ -724,7 +497,6 @@ def main(argv: list[str] | None = None) -> int:
             print("Done.")
 
         elif args.command == "next":
-            # Find the most recent sequential run that has pending tasks
             target_run = None
             for run in reversed(state.runs):
                 if run.strategy == "sequential_subtasks" and run.status == "running":
@@ -738,8 +510,6 @@ def main(argv: list[str] | None = None) -> int:
             next_task = None
             for task in target_run.tasks:
                 if task.status == "planned":
-                    # Check dependencies (simple: previous task must be pr_created, completed or merged)
-                    # For now, let's just take the first planned task
                     next_task = task
                     break
 
@@ -770,7 +540,7 @@ def main(argv: list[str] | None = None) -> int:
                     create_time=session.get("createTime"),
                     update_time=session.get("updateTime"),
                 )
-                next_task.status = get_jules_state_mapping(next_task.jules.state, False)  # type: ignore
+                next_task.status = get_jules_state_mapping(next_task.jules.state, False)
                 print(f"  Success: {next_task.jules.session_url}")
             except Exception as e:
                 next_task.status = "failed"
