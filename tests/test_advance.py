@@ -53,7 +53,7 @@ class TestAdvance(unittest.TestCase):
     ):
         mock_sync.return_value = 0
         mock_sync_task.return_value = True
-        mock_feedback_loop.return_value = False  # Stop loop
+        mock_feedback_loop.return_value = "skipped"  # Stop loop
 
         task1 = Task(
             id="1",
@@ -106,7 +106,7 @@ class TestAdvance(unittest.TestCase):
     ):
         mock_sync.return_value = 0
         mock_sync_task.return_value = True
-        mock_feedback_loop.return_value = True  # Action taken
+        mock_feedback_loop.return_value = "completed"  # Action taken
 
         task = Task(
             id="1",
@@ -152,7 +152,7 @@ class TestAdvance(unittest.TestCase):
     ):
         mock_sync.return_value = 0
         mock_sync_task.return_value = False # Sync fails
-        mock_feedback_loop.return_value = True  # Action taken
+        mock_feedback_loop.return_value = "completed"  # Action taken
 
         task = Task(
             id="1",

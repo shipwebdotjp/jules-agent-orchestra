@@ -100,7 +100,7 @@ class FeedbackTests(unittest.TestCase):
         input_func = MagicMock(return_value="y")
         output_func = MagicMock()
 
-        run_feedback_loop(
+        outcome = run_feedback_loop(
             task,
             cwd=Path("/tmp"),
             client=client,
@@ -109,6 +109,7 @@ class FeedbackTests(unittest.TestCase):
             output=output_func
         )
 
+        self.assertEqual(outcome, "completed")
         client.approve_plan.assert_called_once_with("sessions/s1")
         client.send_message.assert_not_called()
         self.assertEqual(task.status, "plan_approved")
@@ -141,7 +142,7 @@ class FeedbackTests(unittest.TestCase):
         input_func = MagicMock(return_value="y")
         output_func = MagicMock()
 
-        run_feedback_loop(
+        outcome = run_feedback_loop(
             task,
             cwd=Path("/tmp"),
             client=client,
@@ -150,6 +151,7 @@ class FeedbackTests(unittest.TestCase):
             output=output_func
         )
 
+        self.assertEqual(outcome, "completed")
         client.approve_plan.assert_not_called()
         client.send_message.assert_called_once_with("sessions/s1", "Fix this")
 
@@ -171,7 +173,7 @@ class FeedbackTests(unittest.TestCase):
         client = MagicMock()
         output_func = MagicMock()
 
-        run_feedback_loop(
+        outcome = run_feedback_loop(
             task,
             cwd=Path("/tmp"),
             client=client,
@@ -179,6 +181,7 @@ class FeedbackTests(unittest.TestCase):
             output=output_func
         )
 
+        self.assertEqual(outcome, "failed")
         mock_sync.assert_called_once()
         output_func.assert_any_call("Error: Failed to sync task state. Please check your connection and try again.")
 

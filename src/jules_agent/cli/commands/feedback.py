@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime
 from pathlib import Path
+from typing import Literal
 
 from ...client import JulesClient
 from ...models import State, Task
@@ -15,6 +16,7 @@ from ...pipeline import (
 )
 from ..state import resolve_task, sync_task
 
+FeedbackOutcome = Literal["completed", "skipped", "failed"]
 
 def run_feedback_loop(
     task: Task,
@@ -28,7 +30,7 @@ def run_feedback_loop(
     auto_plan_approval: bool = False,
     auto_feedback: bool = False,
     allow_skip: bool = False,
-) -> bool:
+) -> FeedbackOutcome:
     if not task.jules:
         raise PipelineError("Task has no Jules session info.")
 
@@ -40,7 +42,7 @@ def run_feedback_loop(
             output(
                 "Error: Failed to sync task state. Please check your connection and try again."
             )
-            return False
+            return "failed"
 
         is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
 
@@ -58,7 +60,7 @@ def run_feedback_loop(
             )
         except Exception as e:
             output(f"Error fetching suggestion: {e}")
-            return False
+            return "failed"
 
         suggestion = result["suggestion"]
         explanation = result["explanation"]
@@ -72,13 +74,13 @@ def run_feedback_loop(
                     output("Auto-approving plan as recommended by Codex...")
                     client.approve_plan(task.jules.session_name)
                     task.status = "plan_approved"
-                    return True
+                    return "completed"
                 else:
                     output("Codex does not recommend auto-approval. Falling back to interactive mode.")
             elif not is_awaiting_plan_approval and auto_feedback:
                 output(f"Sending auto-reply:\n{suggestion}")
                 client.send_message(task.jules.session_name, suggestion)
-                return True
+                return "completed"
 
             first_iteration = False
 
@@ -116,7 +118,7 @@ def run_feedback_loop(
                 else:
                     output("Sending message to Jules...")
                     client.send_message(task.jules.session_name, suggestion)
-                return True
+                return "completed"
             elif answer == "f":
                 try:
                     feedback = input_func("Feedback for revision: ").strip()
@@ -142,11 +144,11 @@ def run_feedback_loop(
                 if message:
                     output("Sending manual message to Jules...")
                     client.send_message(task.jules.session_name, message)
-                    return True
+                    return "completed"
                 output("Message cannot be empty.")
             elif allow_skip and answer == "s":
                 output("Skipping task.")
-                return False
+                return "skipped"
             else:
                 output(f"Please answer with {choices}.")
 
@@ -165,14 +167,16 @@ def handle_feedback(
             1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
         )
 
-    success = run_feedback_loop(
+    outcome = run_feedback_loop(
         task,
         cwd=cwd,
         client=client,
         codex_bin=codex_bin,
     )
-    if not success:
+    if outcome == "failed":
         return 1
+    if outcome == "skipped":
+        return 0
 
     task.updated_at = (
         datetime.datetime.now(datetime.timezone.utc)
