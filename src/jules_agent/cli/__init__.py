@@ -7,6 +7,7 @@ from pathlib import Path
 from .commands import (
     handle_approve,
     handle_feedback,
+    handle_merge,
     handle_next,
     handle_run,
     handle_send,
@@ -106,6 +107,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     feedback_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
 
+    merge_parser = subparsers.add_parser("merge", help="Merge pull request for a task")
+    merge_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
+    merge_group = merge_parser.add_mutually_exclusive_group()
+    merge_group.add_argument(
+        "--merge",
+        action="store_const",
+        dest="merge_method",
+        const="merge",
+        help="Use merge commit (default)",
+    )
+    merge_group.add_argument(
+        "--squash",
+        action="store_const",
+        dest="merge_method",
+        const="squash",
+        help="Squash and merge",
+    )
+    merge_group.add_argument(
+        "--rebase",
+        action="store_const",
+        dest="merge_method",
+        const="rebase",
+        help="Rebase and merge",
+    )
+
     subparsers.add_parser("next", help="Dispatch next task in sequential run")
 
     return parser
@@ -165,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_feedback(args, state, client, cwd, codex_bin, parser)
         elif args.command == "send":
             return handle_send(args, state, client, cwd, parser)
+        elif args.command == "merge":
+            return handle_merge(args, state, client, github_client, cwd, config, parser)
         elif args.command == "next":
             return handle_next(args, state, client, cwd)
 
