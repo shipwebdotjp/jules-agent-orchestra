@@ -89,6 +89,7 @@ repo = "owner/repo"
 github_token = "ghp_your-github-token"
 codex_bin = "codex"
 base_url = "https://jules.googleapis.com/v1alpha"
+merge_method = "rebase"
 ```
 
 Example:
