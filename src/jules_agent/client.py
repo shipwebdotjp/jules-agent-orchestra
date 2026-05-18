@@ -142,7 +142,7 @@ class JulesClient:
 
     def send_message(self, session_name: str, message: str) -> dict[str, Any]:
         url = f"{self.base_url}/{session_name}:sendMessage"
-        payload = {"message": message}
+        payload = {"prompt": message}
         with httpx.Client() as client:
             response = client.post(url, headers=self.headers, json=payload)
 

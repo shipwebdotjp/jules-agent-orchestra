@@ -422,9 +422,8 @@ def suggestion_schema() -> dict[str, object]:
             "explanation": {"type": "string"},
             "approval_recommended": {"type": "boolean"},
         },
-        "required": ["suggestion", "explanation"],
+        "required": ["suggestion", "explanation", "approval_recommended"],
     }
-
 
 def suggest_reply(
     task_description: str,

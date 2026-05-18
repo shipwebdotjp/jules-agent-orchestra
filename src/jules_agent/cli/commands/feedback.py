@@ -37,7 +37,7 @@ def run_feedback_loop(
             )
             return False
 
-        output("\nFetching suggestion from Codex...")
+        output("\nFetching approval recommendation from Codex..." if task.status == "awaiting_plan_approval" else "\nFetching next suggestion from Codex...")
         is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
         activities = list(client.list_activities(task.jules.session_name))
         result = suggest_reply(

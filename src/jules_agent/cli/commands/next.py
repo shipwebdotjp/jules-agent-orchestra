@@ -53,7 +53,7 @@ def handle_next(
             source_name=source_name,
             starting_branch=starting_branch,
             title=next_task.title,
-            require_plan_approval=True,
+            require_plan_approval=False,
             automation_mode="AUTO_CREATE_PR",
         )
         next_task.jules = JulesSessionInfo(
