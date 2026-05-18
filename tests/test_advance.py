@@ -47,13 +47,13 @@ class TestAdvance(unittest.TestCase):
 
     @patch("jules_agent.cli.commands.advance.handle_sync")
     @patch("jules_agent.cli.commands.advance.sync_task")
-    @patch("jules_agent.cli.commands.advance._handle_interactive")
+    @patch("jules_agent.cli.commands.advance.run_feedback_loop")
     def test_handle_advance_picks_latest_task(
-        self, mock_handle_int, mock_sync_task, mock_sync
+        self, mock_feedback_loop, mock_sync_task, mock_sync
     ):
         mock_sync.return_value = 0
         mock_sync_task.return_value = True
-        mock_handle_int.return_value = False  # Stop loop
+        mock_feedback_loop.return_value = False  # Stop loop
 
         task1 = Task(
             id="1",
@@ -92,21 +92,21 @@ class TestAdvance(unittest.TestCase):
 
         handle_advance(args, state, client, github_client, Path("/tmp"), config)
 
-        # Verify that task2 (later updated_at) was passed to _handle_interactive
-        mock_handle_int.assert_called_once()
-        called_task = mock_handle_int.call_args[0][0]
+        # Verify that task2 (later updated_at) was passed to run_feedback_loop
+        mock_feedback_loop.assert_called_once()
+        called_task = mock_feedback_loop.call_args[0][0]
         self.assertEqual(called_task.id, "2")
 
     @patch("jules_agent.cli.commands.advance.handle_sync")
     @patch("jules_agent.cli.commands.advance.sync_task")
-    @patch("jules_agent.cli.commands.advance._handle_interactive")
+    @patch("jules_agent.cli.commands.advance.run_feedback_loop")
     @patch("jules_agent.cli.commands.advance.save_state")
     def test_handle_advance_stops_after_one_step(
-        self, mock_save, mock_handle_int, mock_sync_task, mock_sync
+        self, mock_save, mock_feedback_loop, mock_sync_task, mock_sync
     ):
         mock_sync.return_value = 0
         mock_sync_task.return_value = True
-        mock_handle_int.return_value = True  # Action taken
+        mock_feedback_loop.return_value = True  # Action taken
 
         task = Task(
             id="1",
@@ -138,24 +138,21 @@ class TestAdvance(unittest.TestCase):
 
         handle_advance(args, state, client, github_client, Path("/tmp"), config)
 
-        # In previous version (loop), it would have called _handle_interactive twice
-        # (once for awaiting_plan_approval, then again after sync) if status didn't change
-        # or it would keep going.
         # Now it must call it exactly once.
-        mock_handle_int.assert_called_once()
+        mock_feedback_loop.assert_called_once()
         mock_sync_task.assert_called_once()
         mock_save.assert_called_once()
 
     @patch("jules_agent.cli.commands.advance.handle_sync")
     @patch("jules_agent.cli.commands.advance.sync_task")
-    @patch("jules_agent.cli.commands.advance._handle_interactive")
+    @patch("jules_agent.cli.commands.advance.run_feedback_loop")
     @patch("jules_agent.cli.commands.advance.save_state")
     def test_handle_advance_no_save_on_sync_failure(
-        self, mock_save, mock_handle_int, mock_sync_task, mock_sync
+        self, mock_save, mock_feedback_loop, mock_sync_task, mock_sync
     ):
         mock_sync.return_value = 0
         mock_sync_task.return_value = False # Sync fails
-        mock_handle_int.return_value = True  # Action taken
+        mock_feedback_loop.return_value = True  # Action taken
 
         task = Task(
             id="1",
@@ -187,7 +184,7 @@ class TestAdvance(unittest.TestCase):
 
         handle_advance(args, state, client, github_client, Path("/tmp"), config)
 
-        mock_handle_int.assert_called_once()
+        mock_feedback_loop.assert_called_once()
         mock_sync_task.assert_called_once()
         mock_save.assert_not_called()
 
