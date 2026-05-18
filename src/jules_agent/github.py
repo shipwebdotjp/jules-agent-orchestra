@@ -77,13 +77,16 @@ class GitHubClient:
         pull_number: int,
         commit_title: str | None = None,
         commit_message: str | None = None,
+        merge_method: str | None = None,
     ) -> dict[str, Any]:
         path = f"/repos/{repo}/pulls/{pull_number}/merge"
-        payload = {}
+        payload: dict[str, Any] = {}
         if commit_title:
             payload["commit_title"] = commit_title
         if commit_message:
             payload["commit_message"] = commit_message
+        if merge_method:
+            payload["merge_method"] = merge_method
 
         response = self._request("PUT", path, json=payload)
         if response.status_code != 200:

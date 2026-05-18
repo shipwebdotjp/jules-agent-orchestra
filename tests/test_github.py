@@ -95,7 +95,7 @@ def test_merge_pull_request_success():
         return_value=httpx.Response(200, json={"merged": True, "message": "Pull Request successfully merged"})
     )
 
-    result = client.merge_pull_request(repo, pull_number, commit_title="Merge PR", commit_message="Closing issue")
+    result = client.merge_pull_request(repo, pull_number, commit_title="Merge PR", commit_message="Closing issue", merge_method="squash")
 
     assert result["merged"] is True
     assert route.called
@@ -103,6 +103,7 @@ def test_merge_pull_request_success():
     payload = json.loads(route.calls.last.request.content)
     assert payload["commit_title"] == "Merge PR"
     assert payload["commit_message"] == "Closing issue"
+    assert payload["merge_method"] == "squash"
 
 @respx.mock
 def test_merge_pull_request_error():

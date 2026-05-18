@@ -13,6 +13,7 @@ class Config:
     github_token: str | None = None
     codex_bin: str = "codex"
     base_url: str = "https://jules.googleapis.com/v1alpha"
+    merge_method: str = "merge"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
@@ -22,6 +23,7 @@ class Config:
             github_token=data.get("github_token"),
             codex_bin=data.get("codex_bin", "codex"),
             base_url=data.get("base_url", "https://jules.googleapis.com/v1alpha"),
+            merge_method=data.get("merge_method", "merge"),
         )
 
 
