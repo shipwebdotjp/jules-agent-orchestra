@@ -1,3 +1,4 @@
+from .advance import handle_advance
 from .approve import handle_approve
 from .feedback import handle_feedback, run_feedback_loop
 from .merge import handle_merge
@@ -8,6 +9,7 @@ from .status import handle_status
 from .sync import handle_sync
 
 __all__ = [
+    "handle_advance",
     "handle_approve",
     "handle_feedback",
     "handle_merge",
