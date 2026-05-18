@@ -31,15 +31,37 @@ pip install -e .
 ## Usage
 
 ```bash
-jules-agent "Refactor the CLI and add tests"
+jules-agent [flags] <command> [args]
 ```
 
-Optional flags:
+### Subcommands
 
-- `--repo owner/name` override the Jules repository target
-- `--codex-bin /path/to/codex` use a different Codex executable
-- `--no-confirm` skip the confirmation loop and dispatch immediately
-- `--config /path/to/config.toml` specify a custom configuration file
+- `run <task>`: Analyze a new task with Codex and dispatch it to Jules.
+- `status`: Show the current local state, including runs and tasks. Use `--show-activities` to see the session history.
+- `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
+- `advance [--auto]`: Automatically or interactively advance work across the next active task.
+    - In `--auto` mode, it will auto-approve plans (if recommended by Codex), send auto-replies, and **automatically merge pull requests** if they are mergeable.
+- `approve <task_id>`: Manually approve the proposed plan for a specific task.
+- `send <task_id> <message>`: Send a manual message to a task's Jules session.
+- `feedback <task_id>`: Enter an interactive feedback loop with Codex to refine a task's plan or reply.
+- `merge <task_id>`: Manually merge the pull request associated with a task.
+- `next`: Dispatch the next task in a sequential run.
+
+### Global Flags
+
+- `--repo owner/name`: Override the target repository.
+- `--codex-bin /path/to/codex`: Use a specific Codex executable.
+- `--config /path/to/config.toml`: Specify a custom configuration file.
+
+### Examples
+
+```bash
+# Start a new task
+jules-agent run "Refactor the CLI and add tests"
+
+# Advance all work in auto mode (including auto-merge)
+jules-agent advance --auto
+```
 
 ## Configuration
 
