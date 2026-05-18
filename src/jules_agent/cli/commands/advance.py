@@ -57,7 +57,7 @@ def handle_advance(
     auto_feedback = args.auto or args.auto_feedback
 
     # 5. Run the feedback flow (shared implementation)
-    step_completed = run_feedback_loop(
+    outcome = run_feedback_loop(
         target_task,
         cwd=cwd,
         client=client,
@@ -67,7 +67,7 @@ def handle_advance(
         allow_skip=True,
     )
 
-    if step_completed:
+    if outcome == "completed":
         # Re-sync task to get final state and update updated_at
         if sync_task(client, target_task):
             target_task.updated_at = (
