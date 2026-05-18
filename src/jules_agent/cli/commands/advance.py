@@ -24,10 +24,7 @@ def handle_advance(
     cwd: Path,
     config: Config,
 ) -> int:
-    # 1. Load advance_mode from config with precedence flag > config > default
-    advance_mode = getattr(args, "advance_mode", None) or config.advance_mode or "interactive"
-
-    # 2. Sync state at command start
+    # 1. Sync state at command start
     print("Syncing state...")
     sync_result = handle_sync(args, state, client, github_client, cwd)
     if sync_result != 0:
@@ -55,25 +52,40 @@ def handle_advance(
 
     # 4. Guided loop
     while target_task.status in ADVANCEABLE_STATUSES:
-        if advance_mode == "auto":
+        use_auto = False
+        if args.auto:
+            use_auto = True
+        elif target_task.status == "awaiting_plan_approval" and args.auto_plan_approval:
+            use_auto = True
+        elif target_task.status == "awaiting_user_feedback" and args.auto_feedback:
+            use_auto = True
+        elif target_task.status == "pr_created" and args.auto_merge:
+            use_auto = True
+
+        if use_auto:
             # Guard to stop repeated external writes by detecting no-status-change
             prev_status = target_task.status
             success = _handle_auto(target_task, state, client, github_client, cwd, config)
-            if success is None: # User skipped in PR check
+            if success is None:  # User skipped in PR check
                 break
 
             # Sync and check for status change
             if not sync_task(client, target_task):
                 print("Failed to sync task after auto run.")
-                advance_mode = "interactive"
-                continue
+                break
 
             if not success or target_task.status == prev_status:
-                print("Auto-advance did not result in a status change. Falling back to interactive mode.")
-                advance_mode = "interactive"
-                continue # Re-evaluate in interactive mode
+                print(
+                    f"Auto-advance for {target_task.status} did not result in a status change. Falling back to interactive mode."
+                )
+                if not _handle_interactive(
+                    target_task, state, client, github_client, cwd, config
+                ):
+                    break
         else:
-            if not _handle_interactive(target_task, state, client, github_client, cwd, config):
+            if not _handle_interactive(
+                target_task, state, client, github_client, cwd, config
+            ):
                 # User skipped or some other reason to stop the loop
                 break
 

@@ -86,6 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the confirmation loop and dispatch immediately.",
     )
+    run_parser.add_argument(
+        "--auto-plan-approval",
+        action="store_true",
+        help="Automatically approve the task plan (forces requirePlanApproval=false).",
+    )
 
     status_parser = subparsers.add_parser("status", help="Show local state")
     status_parser.add_argument(
@@ -139,11 +144,24 @@ def build_parser() -> argparse.ArgumentParser:
         "advance", help="Automatically or interactively advance work"
     )
     advance_parser.add_argument(
+        "--auto-plan-approval",
+        action="store_true",
+        help="Automatically approve plans when recommended.",
+    )
+    advance_parser.add_argument(
+        "--auto-feedback",
+        action="store_true",
+        help="Automatically send suggested feedback.",
+    )
+    advance_parser.add_argument(
+        "--auto-merge",
+        action="store_true",
+        help="Automatically merge mergeable pull requests.",
+    )
+    advance_parser.add_argument(
         "--auto",
-        action="store_const",
-        dest="advance_mode",
-        const="auto",
-        help="Run in automatic mode (auto-approve/auto-reply)",
+        action="store_true",
+        help="Enable all automatic behaviors (plan approval, feedback, and merge).",
     )
 
     return parser
