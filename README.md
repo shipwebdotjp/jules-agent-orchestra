@@ -39,7 +39,7 @@ jules-agent [flags] <command> [args]
 - `run <task>`: Analyze a new task with Codex and dispatch it to Jules.
 - `status`: Show the current local state, including runs and tasks. Use `--show-activities` to see the session history.
 - `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
-- `advance [--auto]`: Automatically or interactively advance work across all active tasks.
+- `advance [--auto]`: Automatically or interactively advance work across the next active task.
     - In `--auto` mode, it will auto-approve plans (if recommended by Codex), send auto-replies, and **automatically merge pull requests** if they are mergeable.
 - `approve <task_id>`: Manually approve the proposed plan for a specific task.
 - `send <task_id> <message>`: Send a manual message to a task's Jules session.

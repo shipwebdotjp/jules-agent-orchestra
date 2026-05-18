@@ -1,6 +1,6 @@
 from __future__ import annotations
-
 import argparse
+import re
 import datetime
 from pathlib import Path
 from typing import Any
@@ -12,6 +12,9 @@ from ...models import State, Task, TaskStatus
 from ...pipeline import save_state, suggest_reply, PipelineError
 from ..state import extract_pull_request_number, sync_task
 from .sync import handle_sync
+
+PULL_REQUEST_URL_RE = re.compile(r"https?://github\.com/([^/]+/[^/]+)/pull(?:s)?/(\d+)")
+
 
 def handle_advance(
     args: argparse.Namespace,
@@ -138,14 +141,21 @@ def _handle_auto(
             print("Task has no pull request URL.")
             return False
 
-        pull_number = extract_pull_request_number(task.pull_request.url)
-        if pull_number is None:
-            print(f"Could not extract pull request number from {task.pull_request.url}")
+        match = PULL_REQUEST_URL_RE.search(task.pull_request.url)
+        if not match:
+            print(f"Could not parse pull request URL: {task.pull_request.url}")
             return False
+
+        url_repo, pull_number_str = match.groups()
+        pull_number = int(pull_number_str)
 
         repo = state.project.repo
         if not repo:
             print("Error: Repository not set in project state.")
+            return False
+
+        if url_repo.lower() != repo.lower():
+            print(f"Error: PR repository {url_repo} does not match project repository {repo}.")
             return False
 
         print(f"Checking mergeability for PR #{pull_number} in {repo}...")
@@ -291,15 +301,27 @@ def _handle_interactive_pr(
         print("Task has no pull request URL.")
         return False
 
-    pull_number = extract_pull_request_number(task.pull_request.url)
-    if pull_number is None:
-        print(f"Could not extract pull request number from {task.pull_request.url}")
+    match = PULL_REQUEST_URL_RE.search(task.pull_request.url)
+    if not match:
+        print(f"Could not parse pull request URL: {task.pull_request.url}")
         return False
+
+    url_repo, pull_number_str = match.groups()
+    pull_number = int(pull_number_str)
 
     repo = state.project.repo
     if not repo:
         print("Error: Repository not set in project state.")
         return False
+
+    if url_repo.lower() != repo.lower():
+        print(f"Warning: PR repository {url_repo} does not match project repository {repo}.")
+        try:
+            answer = input(f"Proceed with PR from different repository? (y/n): ").strip().lower()
+            if answer not in {"y", "yes"}:
+                return None
+        except EOFError:
+            return None
 
     print(f"\nPull Request created: {task.pull_request.url}")
 
