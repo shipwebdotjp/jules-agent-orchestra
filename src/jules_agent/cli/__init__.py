@@ -154,14 +154,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Automatically send suggested feedback.",
     )
     advance_parser.add_argument(
-        "--auto-merge",
-        action="store_true",
-        help="Automatically merge mergeable pull requests.",
-    )
-    advance_parser.add_argument(
         "--auto",
         action="store_true",
-        help="Enable all automatic behaviors (plan approval, feedback, and merge).",
+        help="Enable all automatic behaviors (plan approval and feedback).",
     )
 
     return parser

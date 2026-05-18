@@ -22,9 +22,10 @@ def handle_sync(
     client: JulesClient,
     github_client: GitHubClient | None,
     cwd: Path,
+    skip_pr_sync: bool = False,
 ) -> int:
     updated_count = 0
-    if github_client is None and any(
+    if not skip_pr_sync and github_client is None and any(
         task.status == "pr_created"
         for run in state.runs
         for task in run.tasks
@@ -54,14 +55,15 @@ def handle_sync(
 
             for task in run.tasks:
                 if task.status == "pr_created":
-                    print(f"DEBUG: Syncing pr_created task {task.id}. GitHub client: {github_client is not None}")
-                    if github_client and sync_pr_created_task(
-                        github_client,
-                        state.project.repo,
-                        task,
-                    ):
-                        updated_count += 1
-                        run_updated = True
+                    if not skip_pr_sync:
+                        print(f"DEBUG: Syncing pr_created task {task.id}. GitHub client: {github_client is not None}")
+                        if github_client and sync_pr_created_task(
+                            github_client,
+                            state.project.repo,
+                            task,
+                        ):
+                            updated_count += 1
+                            run_updated = True
                     continue
 
                 if task.status not in (

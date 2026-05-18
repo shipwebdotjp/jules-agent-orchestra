@@ -15,20 +15,17 @@ class TestAdvance(unittest.TestCase):
         self.assertTrue(args.auto)
         self.assertFalse(args.auto_plan_approval)
         self.assertFalse(args.auto_feedback)
-        self.assertFalse(args.auto_merge)
 
         args = parser.parse_args(
             [
                 "advance",
                 "--auto-plan-approval",
                 "--auto-feedback",
-                "--auto-merge",
             ]
         )
         self.assertFalse(args.auto)
         self.assertTrue(args.auto_plan_approval)
         self.assertTrue(args.auto_feedback)
-        self.assertTrue(args.auto_merge)
 
     @patch("jules_agent.cli.commands.advance.handle_sync")
     @patch("jules_agent.cli.commands.advance.save_state")
@@ -39,7 +36,6 @@ class TestAdvance(unittest.TestCase):
             auto=False,
             auto_plan_approval=False,
             auto_feedback=False,
-            auto_merge=False,
         )
         client = MagicMock()
         github_client = MagicMock()
@@ -89,7 +85,6 @@ class TestAdvance(unittest.TestCase):
             auto=False,
             auto_plan_approval=False,
             auto_feedback=False,
-            auto_merge=False,
         )
         client = MagicMock()
         github_client = MagicMock()
@@ -136,7 +131,6 @@ class TestAdvance(unittest.TestCase):
             auto=False,
             auto_plan_approval=False,
             auto_feedback=False,
-            auto_merge=False,
         )
         client = MagicMock()
         github_client = MagicMock()
@@ -186,7 +180,6 @@ class TestAdvance(unittest.TestCase):
             auto=False,
             auto_plan_approval=False,
             auto_feedback=False,
-            auto_merge=False,
         )
         client = MagicMock()
         github_client = MagicMock()
