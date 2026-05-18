@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ...client import JulesClient
 from ...models import ExecutionPlan, JulesSessionInfo, Run, State, Task
+from ...config import Config
 from ...pipeline import (
     CommandRunner,
     decompose_task,
@@ -56,8 +57,11 @@ def handle_run(
     state: State,
     client: JulesClient,
     cwd: Path,
-    codex_bin: str,
+    config: Config,
 ) -> int:
+    codex_bin = args.codex_bin or config.codex_bin
+    auto_plan_approval = args.auto_plan_approval or config.auto_plan_approval
+    
     if args.no_confirm:
         plan = decompose_task(args.task, cwd=cwd, codex_bin=codex_bin)
         validate_plan(plan)
@@ -116,7 +120,7 @@ def handle_run(
                 source_name=source_name,
                 starting_branch=starting_branch,
                 title=task.title,
-                require_plan_approval=not args.auto_plan_approval,
+                require_plan_approval=not auto_plan_approval,
                 automation_mode="AUTO_CREATE_PR",
             )
             task.jules = JulesSessionInfo(

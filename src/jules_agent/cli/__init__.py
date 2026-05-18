@@ -185,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     repo = args.repo or config.repo
     codex_bin = args.codex_bin or config.codex_bin
     base_url = config.base_url
+    
 
     client = JulesClient(api_key=api_key, base_url=base_url)
     github_client = GitHubClient(token=github_token) if github_token else None
@@ -210,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
             state = State(project=ProjectState(root=str(git_root), repo=repo))
 
         if args.command == "run":
-            return handle_run(args, state, client, cwd, codex_bin)
+            return handle_run(args, state, client, cwd, config)
         elif args.command == "advance":
             return handle_advance(args, state, client, github_client, cwd, config)
         elif args.command == "status":
