@@ -53,18 +53,24 @@ def handle_advance(
     # 4. Guided loop
     while target_task.status in ADVANCEABLE_STATUSES:
         if advance_mode == "auto":
-            success = _handle_auto(target_task, client, github_client, cwd, config)
+            # Guard to stop repeated external writes by detecting no-status-change
+            prev_status = target_task.status
+            success = _handle_auto(target_task, state, client, github_client, cwd, config)
             if success is None: # User skipped in PR check
                 break
-            if not success:
-                print("Auto-advance could not proceed. Falling back to interactive mode.")
+
+            # Sync and check for status change
+            if not sync_task(client, target_task):
+                print("Failed to sync task after auto run.")
+                advance_mode = "interactive"
+                continue
+
+            if not success or target_task.status == prev_status:
+                print("Auto-advance did not result in a status change. Falling back to interactive mode.")
                 advance_mode = "interactive"
                 continue # Re-evaluate in interactive mode
-            # If auto handled it, we might want to continue the loop if status is still advanceable
-            if not sync_task(client, target_task):
-                break
         else:
-            if not _handle_interactive(target_task, client, github_client, cwd, config):
+            if not _handle_interactive(target_task, state, client, github_client, cwd, config):
                 # User skipped or some other reason to stop the loop
                 break
 
@@ -85,6 +91,7 @@ def handle_advance(
 
 def _handle_auto(
     task: Task,
+    state: State,
     client: JulesClient,
     github_client: GitHubClient | None,
     cwd: Path,
@@ -124,14 +131,13 @@ def _handle_auto(
 
     elif task.status == "pr_created":
         # pr_created in both modes asks whether to merge
-        # _handle_interactive_pr returns False if skipped or error
-        # Let's change it to return bool | None
-        return _handle_interactive_pr(task, client, github_client, config)
+        return _handle_interactive_pr(task, state, client, github_client, config)
 
     return False
 
 def _handle_interactive(
     task: Task,
+    state: State,
     client: JulesClient,
     github_client: GitHubClient | None,
     cwd: Path,
@@ -140,7 +146,7 @@ def _handle_interactive(
     if task.status in ("awaiting_plan_approval", "awaiting_user_feedback"):
         return _handle_interactive_feedback(task, client, cwd, config)
     elif task.status == "pr_created":
-        res = _handle_interactive_pr(task, client, github_client, config)
+        res = _handle_interactive_pr(task, state, client, github_client, config)
         return res is True
     return False
 
@@ -236,6 +242,7 @@ def _handle_interactive_feedback(
 
 def _handle_interactive_pr(
     task: Task,
+    state: State,
     client: JulesClient,
     github_client: GitHubClient | None,
     config: Config,
@@ -253,6 +260,11 @@ def _handle_interactive_pr(
         print(f"Could not extract pull request number from {task.pull_request.url}")
         return False
 
+    repo = state.project.repo
+    if not repo:
+        print("Error: Repository not set in project state.")
+        return False
+
     print(f"\nPull Request created: {task.pull_request.url}")
 
     while True:
@@ -265,7 +277,7 @@ def _handle_interactive_pr(
             merge_method = config.merge_method or "merge"
             print(f"Merging PR #{pull_number} using {merge_method} strategy...")
             try:
-                github_client.merge_pull_request(config.repo, pull_number, merge_method=merge_method)
+                github_client.merge_pull_request(repo, pull_number, merge_method=merge_method)
                 task.status = "merged"
                 print("Successfully merged.")
                 return True
