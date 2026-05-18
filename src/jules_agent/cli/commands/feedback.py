@@ -25,7 +25,7 @@ def run_feedback_loop(
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
-) -> None:
+) -> bool:
     if not task.jules:
         raise PipelineError("Task has no Jules session info.")
 
@@ -35,7 +35,7 @@ def run_feedback_loop(
             output(
                 "Error: Failed to sync task state. Please check your connection and try again."
             )
-            return
+            return False
 
         output("\nFetching suggestion from Codex...")
         is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
@@ -84,7 +84,7 @@ def run_feedback_loop(
                 else:
                     output("Sending suggestion to Jules...")
                     client.send_message(task.jules.session_name, suggestion)
-                return
+                return True
             elif answer == "f":
                 try:
                     feedback = input_func("Feedback for revision: ").strip()
@@ -110,7 +110,7 @@ def run_feedback_loop(
                 if message:
                     output("Sending manual message to Jules...")
                     client.send_message(task.jules.session_name, message)
-                    return
+                    return True
                 output("Message cannot be empty.")
             else:
                 output("Please answer with y, f, or m.")
@@ -130,12 +130,15 @@ def handle_feedback(
             1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
         )
 
-    run_feedback_loop(
+    success = run_feedback_loop(
         task,
         cwd=cwd,
         client=client,
         codex_bin=codex_bin,
     )
+    if not success:
+        return 1
+
     task.updated_at = (
         datetime.datetime.now(datetime.timezone.utc)
         .isoformat()
