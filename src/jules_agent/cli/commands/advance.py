@@ -1,19 +1,15 @@
 from __future__ import annotations
 import argparse
-import re
 import datetime
 from pathlib import Path
-from typing import Any
 
 from ...client import JulesClient
 from ...config import Config
 from ...github import GitHubClient
 from ...models import State, Task, TaskStatus
-from ...pipeline import save_state, suggest_reply, PipelineError
-from ..state import extract_pull_request_number, sync_task
+from ...pipeline import save_state, suggest_reply
+from ..state import sync_task
 from .sync import handle_sync
-
-PULL_REQUEST_URL_RE = re.compile(r"https?://github\.com/([^/]+/[^/]+)/pull(?:s)?/(\d+)")
 
 
 def handle_advance(
@@ -24,9 +20,9 @@ def handle_advance(
     cwd: Path,
     config: Config,
 ) -> int:
-    # 1. Sync state at command start
+    # 1. Sync state at command start (skipping PR sync as advance no longer handles pr_created tasks)
     print("Syncing state...")
-    sync_result = handle_sync(args, state, client, github_client, cwd)
+    sync_result = handle_sync(args, state, client, github_client, cwd, skip_pr_sync=True)
     if sync_result != 0:
         return sync_result
 
@@ -34,18 +30,23 @@ def handle_advance(
     ADVANCEABLE_STATUSES: set[TaskStatus] = {
         "awaiting_plan_approval",
         "awaiting_user_feedback",
-        "pr_created",
     }
 
     target_task: Task | None = None
+    pr_created_tasks_exist = False
     for run in state.runs:
         for task in run.tasks:
             if task.status in ADVANCEABLE_STATUSES:
                 if target_task is None or task.updated_at > target_task.updated_at:
                     target_task = task
+            elif task.status == "pr_created":
+                pr_created_tasks_exist = True
 
     if not target_task:
-        print("No tasks found that require advancement.")
+        if pr_created_tasks_exist:
+            print("No tasks found that require advancement (found tasks in 'pr_created' status; use 'merge' or 'sync' to handle them).")
+        else:
+            print("No tasks found that require advancement.")
         return 0
 
     print(f"\nAdvancing task: {target_task.id} - {target_task.title} (Status: {target_task.status})")
@@ -58,12 +59,10 @@ def handle_advance(
         use_auto = True
     elif target_task.status == "awaiting_user_feedback" and args.auto_feedback:
         use_auto = True
-    elif target_task.status == "pr_created" and args.auto_merge:
-        use_auto = True
 
     step_completed = False
     if use_auto:
-        success = _handle_auto(target_task, state, client, github_client, cwd, config)
+        success = _handle_auto(target_task, client, cwd, config)
         if success:
             # Action taken automatically
             if sync_task(client, target_task):
@@ -74,7 +73,7 @@ def handle_advance(
             # Codex didn't recommend action or it failed, try interactive fallback
             print(f"Auto-advance for {target_task.status} did not perform an action. Falling back to interactive mode.")
             if _handle_interactive(
-                target_task, state, client, github_client, cwd, config
+                target_task, client, cwd, config
             ):
                 if sync_task(client, target_task):
                     step_completed = True
@@ -82,7 +81,7 @@ def handle_advance(
                     print(f"Failed to sync task {target_task.id} after interactive action.")
     else:
         if _handle_interactive(
-            target_task, state, client, github_client, cwd, config
+            target_task, client, cwd, config
         ):
             if sync_task(client, target_task):
                 step_completed = True
@@ -102,9 +101,7 @@ def handle_advance(
 
 def _handle_auto(
     task: Task,
-    state: State,
     client: JulesClient,
-    github_client: GitHubClient | None,
     cwd: Path,
     config: Config,
 ) -> bool | None:
@@ -140,68 +137,16 @@ def _handle_auto(
             print(f"Error during auto-advance: {e}")
             return False
 
-    elif task.status == "pr_created":
-        if not github_client:
-            print("GITHUB_TOKEN is not set. Cannot auto-merge PR.")
-            return False
-
-        if not task.pull_request or not task.pull_request.url:
-            print("Task has no pull request URL.")
-            return False
-
-        match = PULL_REQUEST_URL_RE.search(task.pull_request.url)
-        if not match:
-            print(f"Could not parse pull request URL: {task.pull_request.url}")
-            return False
-
-        url_repo, pull_number_str = match.groups()
-        pull_number = int(pull_number_str)
-
-        repo = state.project.repo
-        if not repo:
-            print("Error: Repository not set in project state.")
-            return False
-
-        if url_repo.lower() != repo.lower():
-            print(f"Error: PR repository {url_repo} does not match project repository {repo}.")
-            return False
-
-        print(f"Checking mergeability for PR #{pull_number} in {repo}...")
-        try:
-            pr_details = github_client.get_pull_request(repo, pull_number)
-            if not pr_details.get("mergeable"):
-                print(f"PR #{pull_number} is not mergeable at this time.")
-                return False
-        except Exception as e:
-            print(f"Failed to fetch PR details: {e}")
-            return False
-
-        merge_method = config.merge_method or "merge"
-        print(f"Auto-merging PR #{pull_number} using {merge_method} strategy...")
-        try:
-            github_client.merge_pull_request(repo, pull_number, merge_method=merge_method)
-            task.status = "merged"
-            print("Successfully merged.")
-            return True
-        except Exception as e:
-            print(f"Failed to merge PR: {e}")
-            return False
-
     return False
 
 def _handle_interactive(
     task: Task,
-    state: State,
     client: JulesClient,
-    github_client: GitHubClient | None,
     cwd: Path,
     config: Config,
 ) -> bool:
     if task.status in ("awaiting_plan_approval", "awaiting_user_feedback"):
         return _handle_interactive_feedback(task, client, cwd, config)
-    elif task.status == "pr_created":
-        res = _handle_interactive_pr(task, state, client, github_client, config)
-        return res is True
     return False
 
 def _handle_interactive_feedback(
@@ -294,64 +239,3 @@ def _handle_interactive_feedback(
             else:
                 print("Please answer with y, f, m, or s.")
 
-def _handle_interactive_pr(
-    task: Task,
-    state: State,
-    client: JulesClient,
-    github_client: GitHubClient | None,
-    config: Config,
-) -> bool | None:
-    if not github_client:
-        print("GITHUB_TOKEN is not set. Cannot check/merge PR.")
-        return False
-
-    if not task.pull_request or not task.pull_request.url:
-        print("Task has no pull request URL.")
-        return False
-
-    match = PULL_REQUEST_URL_RE.search(task.pull_request.url)
-    if not match:
-        print(f"Could not parse pull request URL: {task.pull_request.url}")
-        return False
-
-    url_repo, pull_number_str = match.groups()
-    pull_number = int(pull_number_str)
-
-    repo = state.project.repo
-    if not repo:
-        print("Error: Repository not set in project state.")
-        return False
-
-    if url_repo.lower() != repo.lower():
-        print(f"Warning: PR repository {url_repo} does not match project repository {repo}.")
-        try:
-            answer = input(f"Proceed with PR from different repository? (y/n): ").strip().lower()
-            if answer not in {"y", "yes"}:
-                return None
-        except EOFError:
-            return None
-
-    print(f"\nPull Request created: {task.pull_request.url}")
-
-    while True:
-        try:
-            answer = input("Merge this pull request? (y/n/s) [y/n/s]: ").strip().lower()
-        except EOFError:
-            return None
-
-        if answer in {"y", "yes"}:
-            merge_method = config.merge_method or "merge"
-            print(f"Merging PR #{pull_number} using {merge_method} strategy...")
-            try:
-                github_client.merge_pull_request(repo, pull_number, merge_method=merge_method)
-                task.status = "merged"
-                print("Successfully merged.")
-                return True
-            except Exception as e:
-                print(f"Failed to merge PR: {e}")
-                return False
-        elif answer in {"n", "no", "s"}:
-            print("Skipping merge.")
-            return None
-        else:
-            print("Please answer with y, n, or s.")

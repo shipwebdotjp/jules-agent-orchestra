@@ -43,7 +43,7 @@ jules-agent [flags] <command> [args]
 - `status`: Show the current local state, including runs and tasks. Use `--show-activities` to see the session history.
 - `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
 - `advance [--auto]`: Automatically or interactively advance work across the next active task.
-    - In `--auto` mode, it will auto-approve plans (if recommended by Codex), send auto-replies, and **automatically merge pull requests** if they are mergeable.
+    - In `--auto` mode, it will auto-approve plans (if recommended by Codex) and send auto-replies.
 - `approve <task_id>`: Manually approve the proposed plan for a specific task.
 - `send <task_id> <message>`: Send a manual message to a task's Jules session.
 - `feedback <task_id>`: Enter an interactive feedback loop with Codex to refine a task's plan or reply.
@@ -62,7 +62,7 @@ jules-agent [flags] <command> [args]
 # Start a new task
 jules-agent run "Refactor the CLI and add tests"
 
-# Advance all work in auto mode (including auto-merge)
+# Advance all work in auto mode
 jules-agent advance --auto
 ```
 
