@@ -130,8 +130,44 @@ def _handle_auto(
             return False
 
     elif task.status == "pr_created":
-        # pr_created in both modes asks whether to merge
-        return _handle_interactive_pr(task, state, client, github_client, config)
+        if not github_client:
+            print("GITHUB_TOKEN is not set. Cannot auto-merge PR.")
+            return False
+
+        if not task.pull_request or not task.pull_request.url:
+            print("Task has no pull request URL.")
+            return False
+
+        pull_number = extract_pull_request_number(task.pull_request.url)
+        if pull_number is None:
+            print(f"Could not extract pull request number from {task.pull_request.url}")
+            return False
+
+        repo = state.project.repo
+        if not repo:
+            print("Error: Repository not set in project state.")
+            return False
+
+        print(f"Checking mergeability for PR #{pull_number} in {repo}...")
+        try:
+            pr_details = github_client.get_pull_request(repo, pull_number)
+            if not pr_details.get("mergeable"):
+                print(f"PR #{pull_number} is not mergeable at this time.")
+                return False
+        except Exception as e:
+            print(f"Failed to fetch PR details: {e}")
+            return False
+
+        merge_method = config.merge_method or "merge"
+        print(f"Auto-merging PR #{pull_number} using {merge_method} strategy...")
+        try:
+            github_client.merge_pull_request(repo, pull_number, merge_method=merge_method)
+            task.status = "merged"
+            print("Successfully merged.")
+            return True
+        except Exception as e:
+            print(f"Failed to merge PR: {e}")
+            return False
 
     return False
 
