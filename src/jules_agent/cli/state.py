@@ -6,7 +6,7 @@ import sys
 
 from ..client import JulesClient
 from ..github import GitHubClient
-from ..models import PullRequestInfo, Run, RunStatus, State, Task, TaskStatus
+from ..models import PullRequestInfo, Run, RunStatus, State, Task, TaskStatus, gitPatchInfo
 from ..pipeline import PipelineError
 
 
@@ -163,6 +163,16 @@ def sync_task(client: JulesClient, task: Task) -> bool:
                     description=pr.get("description"),
                 )
                 has_pr = True
+            changeSet = output.get("changeSet", [])
+            if changeSet:
+                gitPatch = changeSet.get("gitPatch", None)
+                if gitPatch:
+                    gitPatch_info = gitPatchInfo(
+                        unidiffPatch=gitPatch.get("unidiffPatch", ""),
+                        baseCommitId=gitPatch.get("baseCommitId", ""),
+                        suggestedCommitMessage=gitPatch.get("suggestedCommitMessage", ""),
+                    )
+                    task.jules.code_changes = gitPatch_info
 
         task.status = get_jules_state_mapping(task.jules.state, has_pr)
         task.updated_at = (

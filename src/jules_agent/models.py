@@ -45,6 +45,27 @@ class ExecutionPlan:
 
 
 @dataclass
+class gitPatchInfo:
+    unidiffPatch: str
+    baseCommitId: str
+    suggestedCommitMessage: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "unidiffPatch": self.unidiffPatch,
+            "baseCommitId": self.baseCommitId,
+            "suggestedCommitMessage": self.suggestedCommitMessage,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> gitPatchInfo:
+        return cls(
+            unidiffPatch=data["unidiffPatch"],
+            baseCommitId=data["baseCommitId"],
+            suggestedCommitMessage=data["suggestedCommitMessage"],
+        )
+
+@dataclass
 class JulesSessionInfo:
     session_id: str
     session_name: str
@@ -53,6 +74,7 @@ class JulesSessionInfo:
     create_time: str | None = None
     update_time: str | None = None
     activities: list[dict[str, Any]] = field(default_factory=list)
+    code_changes: gitPatchInfo | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +85,7 @@ class JulesSessionInfo:
             "create_time": self.create_time,
             "update_time": self.update_time,
             "activities": self.activities,
+            "code_changes": self.code_changes.to_dict() if self.code_changes else None,
         }
 
     @classmethod
@@ -75,6 +98,7 @@ class JulesSessionInfo:
             create_time=data.get("create_time"),
             update_time=data.get("update_time"),
             activities=data.get("activities", []),
+            code_changes=gitPatchInfo.from_dict(data["code_changes"]) if data.get("code_changes") else None,
         )
 
 
