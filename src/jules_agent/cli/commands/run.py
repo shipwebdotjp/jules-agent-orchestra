@@ -60,6 +60,7 @@ def handle_run(
 ) -> int:
     if args.no_confirm:
         plan = decompose_task(args.task, cwd=cwd, codex_bin=codex_bin)
+        validate_plan(plan)
     else:
         plan = run_confirmation_loop(args.task, cwd=cwd, codex_bin=codex_bin)
 
