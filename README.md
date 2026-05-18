@@ -5,11 +5,13 @@
 ## What it does
 
 1. Takes one task description.
-2. Asks Codex to return a JSON plan with a strategy and tasks.
-3. Shows the proposed plan and asks for confirmation by default.
-4. If the plan is rejected, asks for feedback, revises the breakdown, and repeats until approved.
-5. Sends the tasks to Jules using the selected strategy.
-6. Prints each dispatch result with success/failure, and the session ID when it can be extracted.
+2. Asks Codex whether any clarification is needed before planning.
+3. If needed, asks the user the generated clarification questions, rechecks the task, and repeats up to 5 rounds.
+4. Asks Codex to return a JSON plan with a strategy and tasks.
+5. Shows the proposed plan and asks for confirmation by default.
+6. If the plan is rejected, asks for feedback, revises the breakdown, and repeats until approved.
+7. Sends the tasks to Jules using the selected strategy.
+8. Prints each dispatch result with success/failure, and the session ID when it can be extracted.
 
 ## Requirements
 
@@ -37,6 +39,7 @@ jules-agent [flags] <command> [args]
 ### Subcommands
 
 - `run <task>`: Analyze a new task with Codex and dispatch it to Jules.
+  - In interactive mode, it may first ask clarification questions before generating a plan.
 - `status`: Show the current local state, including runs and tasks. Use `--show-activities` to see the session history.
 - `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
 - `advance [--auto]`: Automatically or interactively advance work across the next active task.

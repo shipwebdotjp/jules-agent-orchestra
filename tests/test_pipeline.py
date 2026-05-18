@@ -10,6 +10,9 @@ from unittest.mock import MagicMock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jules_agent.pipeline import (
+    ClarificationExchange,
+    build_clarified_task_prompt,
+    clarification_schema,
     codex_schema,
     decompose_task,
     dispatch_subtasks,
@@ -104,6 +107,38 @@ class PipelineTests(unittest.TestCase):
                 "out_of_scope",
             },
         )
+
+    def test_clarification_schema_closes_question_objects(self) -> None:
+        schema = clarification_schema()
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(
+            schema["properties"]["questions"]["items"]["required"],
+            ["question", "options"],
+        )
+        self.assertFalse(
+            schema["properties"]["questions"]["items"]["additionalProperties"]
+        )
+        self.assertEqual(
+            set(schema["properties"]["questions"]["items"]["properties"].keys()),
+            {"question", "options"},
+        )
+
+    def test_build_clarified_task_prompt_includes_answers(self) -> None:
+        prompt = build_clarified_task_prompt(
+            "Build a CLI",
+            [
+                ClarificationExchange(
+                    question="Which platform should it target?",
+                    options=["macOS", "Linux"],
+                    answer="macOS",
+                )
+            ],
+        )
+
+        self.assertIn("Build a CLI", prompt)
+        self.assertIn("Clarifications gathered:", prompt)
+        self.assertIn("Which platform should it target?", prompt)
+        self.assertIn("macOS", prompt)
 
     def test_decompose_task_invokes_codex(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -14,6 +14,11 @@ class Config:
     codex_bin: str = "codex"
     base_url: str = "https://jules.googleapis.com/v1alpha"
     merge_method: str = "merge"
+    auto_plan_approval: bool = True
+    auto_feedback: bool = False
+    auto_merge: bool = False
+    auto: bool = False
+
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
@@ -24,6 +29,10 @@ class Config:
             codex_bin=data.get("codex_bin", "codex"),
             base_url=data.get("base_url", "https://jules.googleapis.com/v1alpha"),
             merge_method=data.get("merge_method", "merge"),
+            auto_plan_approval=data.get("auto_plan_approval", True),
+            auto_feedback=data.get("auto_feedback", False),
+            auto_merge=data.get("auto_merge", False),
+            auto=data.get("auto", False),
         )
 
 

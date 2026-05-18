@@ -34,6 +34,25 @@ class PipelineError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class ClarificationQuestion:
+    question: str
+    options: list[str]
+
+
+@dataclass(frozen=True)
+class ClarificationExchange:
+    question: str
+    options: list[str]
+    answer: str
+
+
+@dataclass(frozen=True)
+class ClarificationPrompt:
+    has_questions: bool
+    questions: list[ClarificationQuestion]
+
+
 def run_command(
     args: Sequence[str],
     *,
@@ -175,6 +194,34 @@ def codex_schema() -> dict[str, object]:
     }
 
 
+def clarification_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "has_questions": {"type": "boolean"},
+            "questions": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "question": {"type": "string", "minLength": 1},
+                        "options": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {"type": "string", "minLength": 1},
+                        },
+                    },
+                    "required": ["question", "options"],
+                },
+            },
+        },
+        "required": ["has_questions", "questions"],
+    }
+
+
 def parse_json_document(text: str) -> object:
     stripped = text.strip()
     if not stripped:
@@ -213,6 +260,64 @@ def normalize_subtasks(payload: object) -> list[Subtask]:
         raise PipelineError("Codex output must be a JSON object or array.")
 
     return _normalize_tasks(raw_items)
+
+
+def normalize_clarification(payload: object) -> ClarificationPrompt:
+    if not isinstance(payload, dict):
+        raise PipelineError("Codex output must be a JSON object.")
+
+    raw_has_questions = payload.get("has_questions")
+    if not isinstance(raw_has_questions, bool):
+        raise PipelineError(
+            "Codex output did not include a valid 'has_questions' field."
+        )
+
+    raw_questions = payload.get("questions")
+    if raw_questions is None:
+        raise PipelineError("Codex output did not include a 'questions' field.")
+    if not isinstance(raw_questions, list):
+        raise PipelineError("Codex output field 'questions' must be an array.")
+
+    questions: list[ClarificationQuestion] = []
+    for index, item in enumerate(raw_questions, start=1):
+        if not isinstance(item, dict):
+            raise PipelineError(f"Clarification question {index} is not an object.")
+
+        question = _first_non_empty_text(item.get("question"))
+        if not question:
+            raise PipelineError(f"Clarification question {index} is missing text.")
+
+        raw_options = item.get("options")
+        if not isinstance(raw_options, list):
+            raise PipelineError(
+                f"Clarification question {index} options must be an array."
+            )
+
+        options: list[str] = []
+        for option_index, option in enumerate(raw_options, start=1):
+            if not isinstance(option, str) or not option.strip():
+                raise PipelineError(
+                    f"Clarification question {index} option {option_index} is invalid."
+                )
+            options.append(option.strip())
+
+        if not options:
+            raise PipelineError(
+                f"Clarification question {index} must include at least one option."
+            )
+
+        questions.append(ClarificationQuestion(question=question, options=options))
+
+    if raw_has_questions and not questions:
+        raise PipelineError(
+            "Codex reported that clarification is needed, but returned no questions."
+        )
+    if not raw_has_questions and questions:
+        raise PipelineError(
+            "Codex reported that no clarification is needed, but returned questions."
+        )
+
+    return ClarificationPrompt(has_questions=raw_has_questions, questions=questions)
 
 
 def normalize_plan(payload: object) -> ExecutionPlan:
@@ -295,6 +400,74 @@ def _first_non_empty_text(*values: object) -> str | None:
             if stripped:
                 return stripped
     return None
+
+
+def build_clarification_prompt(
+    task: str,
+    clarification_history: list[ClarificationExchange],
+) -> str:
+    prompt = (
+        "Analyze the task and decide whether any clarification is needed before "
+        "creating a plan for Jules.\n"
+        "If no clarification is needed, return has_questions=false and an empty questions list.\n"
+        "If clarification is needed, return has_questions=true and up to 5 concise questions.\n"
+        "Ask only unresolved questions. Do not repeat questions that have already been answered.\n"
+        "Each question must include a question string and 2-5 mutually exclusive answer options.\n"
+        "Return only JSON.\n\n"
+        f"Task:\n{task.strip()}\n"
+    )
+
+    if clarification_history:
+        prompt += "\nClarification history:\n"
+        for index, item in enumerate(clarification_history, start=1):
+            prompt += f"{index}. Question: {item.question}\n"
+            if item.options:
+                prompt += "   Options:\n"
+                for option_index, option in enumerate(item.options, start=1):
+                    prompt += f"   {option_index}. {option}\n"
+            prompt += f"   Answer: {item.answer}\n"
+
+    return prompt
+
+
+def identify_clarifications(
+    task: str,
+    clarification_history: list[ClarificationExchange],
+    *,
+    cwd: Path,
+    codex_bin: str = "codex",
+    runner: CommandRunner = run_command,
+) -> ClarificationPrompt:
+    prompt = build_clarification_prompt(task, clarification_history)
+    payload = call_codex(
+        prompt,
+        clarification_schema(),
+        cwd=cwd,
+        codex_bin=codex_bin,
+        runner=runner,
+    )
+    return normalize_clarification(payload)
+
+
+def build_clarified_task_prompt(
+    task: str,
+    clarification_history: list[ClarificationExchange],
+) -> str:
+    prompt = task.strip()
+    if not clarification_history:
+        return prompt
+
+    prompt += "\n\nClarifications gathered:\n"
+    for index, item in enumerate(clarification_history, start=1):
+        prompt += f"{index}. {item.question}\n"
+        if item.options:
+            prompt += "   Options:\n"
+            for option_index, option in enumerate(item.options, start=1):
+                prompt += f"   {option_index}. {option}\n"
+        prompt += f"   Answer: {item.answer}\n"
+
+    prompt += "\nUse the clarifications above when creating the plan."
+    return prompt
 
 
 def call_codex(

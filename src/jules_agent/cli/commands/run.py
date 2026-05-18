@@ -9,7 +9,10 @@ from ...client import JulesClient
 from ...models import ExecutionPlan, JulesSessionInfo, Run, State, Task
 from ...config import Config
 from ...pipeline import (
+    ClarificationExchange,
     CommandRunner,
+    build_clarified_task_prompt,
+    identify_clarifications,
     decompose_task,
     find_source_name,
     format_subtask_for_jules,
@@ -19,8 +22,17 @@ from ...pipeline import (
     save_state,
     validate_plan,
 )
-from ..io import build_review_prompt, prompt_for_review, render_plan
+from ..io import (
+    build_review_prompt,
+    prompt_for_clarification_answer,
+    prompt_for_review,
+    render_clarification_question,
+    render_plan,
+)
 from ..state import get_jules_state_mapping
+
+
+MAX_CLARIFICATION_ROUNDS = 5
 
 
 def run_confirmation_loop(
@@ -52,6 +64,58 @@ def run_confirmation_loop(
         output("Revising plan with feedback...")
 
 
+def run_clarification_loop(
+    task: str,
+    *,
+    cwd: Path,
+    codex_bin: str,
+    runner: CommandRunner = run_command,
+    input_func=input,
+    output=print,
+    max_rounds: int = MAX_CLARIFICATION_ROUNDS,
+) -> str:
+    clarification_history: list[ClarificationExchange] = []
+    for round_index in range(1, max_rounds + 1):
+        clarification = identify_clarifications(
+            task,
+            clarification_history,
+            cwd=cwd,
+            codex_bin=codex_bin,
+            runner=runner,
+        )
+        if not clarification.has_questions:
+            if clarification_history:
+                output("No further clarification is needed.")
+            return build_clarified_task_prompt(task, clarification_history)
+
+        output(f"Clarification round {round_index}/{max_rounds}:")
+        for question_index, question in enumerate(clarification.questions, start=1):
+            render_clarification_question(
+                question,
+                output=output,
+                index=question_index,
+                total=len(clarification.questions),
+            )
+            answer = prompt_for_clarification_answer(
+                question,
+                input_func=input_func,
+                output=output,
+            )
+            clarification_history.append(
+                ClarificationExchange(
+                    question=question.question,
+                    options=question.options,
+                    answer=answer,
+                )
+            )
+
+        if round_index < max_rounds:
+            output("Re-checking for remaining clarification gaps...")
+
+    output("Reached the clarification round limit; proceeding with collected answers.")
+    return build_clarified_task_prompt(task, clarification_history)
+
+
 def handle_run(
     args: argparse.Namespace,
     state: State,
@@ -61,12 +125,22 @@ def handle_run(
 ) -> int:
     codex_bin = args.codex_bin or config.codex_bin
     auto_plan_approval = args.auto_plan_approval or config.auto_plan_approval
-    
+
     if args.no_confirm:
-        plan = decompose_task(args.task, cwd=cwd, codex_bin=codex_bin)
+        clarified_task = args.task
+        plan = decompose_task(clarified_task, cwd=cwd, codex_bin=codex_bin)
         validate_plan(plan)
     else:
-        plan = run_confirmation_loop(args.task, cwd=cwd, codex_bin=codex_bin)
+        clarified_task = run_clarification_loop(
+            args.task,
+            cwd=cwd,
+            codex_bin=codex_bin,
+        )
+        plan = run_confirmation_loop(
+            clarified_task,
+            cwd=cwd,
+            codex_bin=codex_bin,
+        )
 
     now_iso = (
         datetime.datetime.now(datetime.timezone.utc)

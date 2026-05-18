@@ -13,6 +13,7 @@ from jules_agent.cli import (
     build_review_prompt,
     extract_pull_request_number,
     get_run_sync_status,
+    run_clarification_loop,
     run_confirmation_loop,
     sync_pr_created_task,
 )
@@ -99,6 +100,64 @@ class CliTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertIn("User feedback from the previous plan:", calls[1][-1])
         self.assertIn("Add tests", calls[1][-1])
+
+    def test_run_clarification_loop_collects_answers(self) -> None:
+        responses = [
+            subprocess.CompletedProcess(
+                args=["codex"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["codex"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+        ]
+        outputs: list[str] = []
+        calls: list[list[str]] = []
+        prompts = iter(["1", "n"])
+        call_count = 0
+
+        def input_func(prompt: str) -> str:
+            self.assertIsInstance(prompt, str)
+            return next(prompts)
+
+        def output_func(message: str) -> None:
+            outputs.append(message)
+
+        def runner(args, *, cwd=None, input_text=None):
+            nonlocal call_count
+            calls.append(list(args))
+            if "--output-last-message" in args:
+                last_message_path = Path(args[args.index("--output-last-message") + 1])
+                payload = (
+                    '{"has_questions":true,"questions":[{"question":"Which platform?","options":["macOS","Linux"]}]}'
+                    if call_count == 0
+                    else '{"has_questions":false,"questions":[]}'
+                )
+                last_message_path.write_text(payload, encoding="utf-8")
+                call_count += 1
+            return responses.pop(0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            clarified_task = run_clarification_loop(
+                "Build a CLI",
+                cwd=Path(tmpdir),
+                codex_bin="codex",
+                runner=runner,
+                input_func=input_func,
+                output=output_func,
+            )
+
+        self.assertIn("Clarifications gathered:", clarified_task)
+        self.assertIn("Which platform?", clarified_task)
+        self.assertIn("macOS", clarified_task)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("Clarification round 1/5:", outputs)
+        self.assertIn("No further clarification is needed.", outputs)
 
     def test_extract_pull_request_number_accepts_common_github_urls(self) -> None:
         self.assertEqual(

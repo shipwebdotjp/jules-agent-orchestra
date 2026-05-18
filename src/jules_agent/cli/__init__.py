@@ -14,6 +14,7 @@ from .commands import (
     handle_send,
     handle_status,
     handle_sync,
+    run_clarification_loop,
     run_confirmation_loop,
     run_feedback_loop,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "prompt_for_review",
     "render_plan",
     "resolve_task",
+    "run_clarification_loop",
     "run_confirmation_loop",
     "run_feedback_loop",
     "sync_pr_created_task",
