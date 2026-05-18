@@ -6,7 +6,7 @@
 
 1. `advance` の責務を「1回の起動で 1 task に対して最大 1 ステップ」に固定する。現状は `while` で同じ task を続けて処理しうるため、cron から叩いたときに複数回の副作用が起きる設計になっている。
 
-2. 対象 task の選び方を現行実装どおりに固定する。`sync` 後の state から `awaiting_plan_approval` / `awaiting_user_feedback` / `pr_created` を候補にし、`updated_at` が最新の 1 件だけを処理対象にする。
+2. 対象 task の選び方を現行実装どおりに固定する。`sync` 後の state から `awaiting_plan_approval` / `awaiting_user_feedback` / `pr_created` を候補にし、`updated_at` が最新の 1 件だけを処理対象にする。`updated_at` が同値なら、state を先に走査した task を選ぶ。
 
 3. `cron` サブコマンドを追加し、完全非対話・完全自動運用専用の入口にする。cron からの呼び出しは `cron` を使い、TTY がないことを前提に人間確認が必要な状態では exit 0 で終了する。
 
