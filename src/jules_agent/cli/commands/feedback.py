@@ -25,11 +25,16 @@ def run_feedback_loop(
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
+    auto_plan_approval: bool = False,
+    auto_feedback: bool = False,
+    allow_skip: bool = False,
 ) -> bool:
     if not task.jules:
         raise PipelineError("Task has no Jules session info.")
 
     feedback_history: list[str] = []
+    first_iteration = True
+
     while True:
         if not sync_task(client, task):
             output(
@@ -37,21 +42,45 @@ def run_feedback_loop(
             )
             return False
 
-        output("\nFetching approval recommendation from Codex..." if task.status == "awaiting_plan_approval" else "\nFetching next suggestion from Codex...")
         is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
-        activities = list(client.list_activities(task.jules.session_name))
-        result = suggest_reply(
-            task.prompt or task.title,
-            activities,
-            feedback_history,
-            cwd=cwd,
-            is_awaiting_plan_approval=is_awaiting_plan_approval,
-            codex_bin=codex_bin,
-            runner=runner,
-        )
+
+        output("\nFetching suggestion from Codex...")
+        try:
+            activities = list(client.list_activities(task.jules.session_name))
+            result = suggest_reply(
+                task.prompt or task.title,
+                activities,
+                feedback_history,
+                cwd=cwd,
+                is_awaiting_plan_approval=is_awaiting_plan_approval,
+                codex_bin=codex_bin,
+                runner=runner,
+            )
+        except Exception as e:
+            output(f"Error fetching suggestion: {e}")
+            return False
+
         suggestion = result["suggestion"]
         explanation = result["explanation"]
         approval_recommended = result.get("approval_recommended", False)
+
+        # Handle auto-action on the first iteration (or every iteration if we want,
+        # but usually auto mode doesn't involve feedback loop)
+        if first_iteration:
+            if is_awaiting_plan_approval and auto_plan_approval:
+                if approval_recommended:
+                    output("Auto-approving plan as recommended by Codex...")
+                    client.approve_plan(task.jules.session_name)
+                    task.status = "plan_approved"
+                    return True
+                else:
+                    output("Codex does not recommend auto-approval. Falling back to interactive mode.")
+            elif not is_awaiting_plan_approval and auto_feedback:
+                output(f"Sending auto-reply:\n{suggestion}")
+                client.send_message(task.jules.session_name, suggestion)
+                return True
+
+            first_iteration = False
 
         output("-" * 40)
         output(f"Explanation: {explanation}")
@@ -64,14 +93,17 @@ def run_feedback_loop(
 
         while True:
             try:
-                if is_awaiting_plan_approval and approval_recommended:
-                    prompt_msg = (
-                        "\nApprove the plan as recommended? (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
-                    )
+                if is_awaiting_plan_approval:
+                    if approval_recommended:
+                        choices = "y/f/m/s" if allow_skip else "y/f/m"
+                        prompt_msg = f"\nApprove the plan as recommended? (y), provide feedback (f), write manual message (m){', or skip (s)' if allow_skip else ''}? [{choices}]: "
+                    else:
+                        choices = "y/f/m/s" if allow_skip else "y/f/m"
+                        prompt_msg = f"\nApprove suggestion (y), provide feedback (f), write manual message (m){', or skip (s)' if allow_skip else ''}? [{choices}]: "
                 else:
-                    prompt_msg = (
-                        "\nApprove suggestion (y), provide feedback (f), or write manual message (m)? [y/f/m]: "
-                    )
+                    choices = "y/f/m/s" if allow_skip else "y/f/m"
+                    prompt_msg = f"\nSend suggestion (y), provide feedback (f), write manual message (m){', or skip (s)' if allow_skip else ''}? [{choices}]: "
+
                 answer = input_func(prompt_msg).strip().lower()
             except EOFError as exc:
                 raise PipelineError("Feedback loop needs interactive input.") from exc
@@ -82,7 +114,7 @@ def run_feedback_loop(
                     client.approve_plan(task.jules.session_name)
                     task.status = "plan_approved"
                 else:
-                    output("Sending suggestion to Jules...")
+                    output("Sending message to Jules...")
                     client.send_message(task.jules.session_name, suggestion)
                 return True
             elif answer == "f":
@@ -112,8 +144,11 @@ def run_feedback_loop(
                     client.send_message(task.jules.session_name, message)
                     return True
                 output("Message cannot be empty.")
+            elif allow_skip and answer == "s":
+                output("Skipping task.")
+                return False
             else:
-                output("Please answer with y, f, or m.")
+                output(f"Please answer with {choices}.")
 
 
 def handle_feedback(
