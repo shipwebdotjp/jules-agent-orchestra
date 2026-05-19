@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 from pathlib import Path
 
 from .git import get_git_root
@@ -32,7 +33,7 @@ def save_state(cwd: Path, state: State) -> None:
     tmp_path.write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    tmp_path.rename(state_path)
+    os.replace(tmp_path, state_path)
 
 
 def generate_run_id(state: State) -> str:

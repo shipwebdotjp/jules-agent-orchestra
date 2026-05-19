@@ -13,6 +13,7 @@ from .codex import (
     ClarificationQuestion,
     PipelineError,
     call_codex,
+    parse_json_document,
 )
 from .git import (
     CommandRunner,
@@ -753,6 +754,16 @@ def perform_task_review(
     try:
         result = run_codex_review(prompt, cwd=cwd, codex_bin=codex_bin)
     except Exception as e:
+        # Post error sticky comment
+        error_body = format_review_sticky_comment(
+            task=task,
+            status="error",
+            attempt=task.attempts + 1,
+            head_sha=head_sha,
+            summary="Codex review failed",
+            next_steps="See pipeline logs and retry or investigate.",
+        )
+        update_sticky_comment(github_client, repo, issue_number, error_body, task)
         # Revert status on failure
         task.status = prev_status
         save_state(cwd, state)

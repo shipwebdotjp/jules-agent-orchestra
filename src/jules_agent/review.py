@@ -71,6 +71,9 @@ def format_review_sticky_comment(
     if status == "in_progress":
         emoji = "⏳"
         status_text = "In Progress"
+    elif status == "error":
+        emoji = "⚠️"
+        status_text = "Error"
     else:
         emoji = "✅" if status == "pass" else "❌"
         status_text = "Passed" if status == "pass" else "Changes Requested"
