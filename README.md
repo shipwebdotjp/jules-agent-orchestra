@@ -44,11 +44,11 @@ jules-agent [flags] <command> [args]
 - `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
 - `advance [flags]`: Automatically or interactively advance work across the next active task.
 - `cron [flags]`: Non-interactive background execution. This is a purely automated version of `advance` that never asks for input.
-- `approve <task_id>`: Manually approve the proposed plan for a specific task.
-- `send <task_id> <message>`: Send a manual message to a task's Jules session.
-- `feedback <task_id>`: Enter an interactive feedback loop with Codex to refine a task's plan or reply.
-- `review <task_id>`: Manually run Codex review for a task with an open pull request.
-- `merge <task_id>`: Manually merge the pull request associated with a task.
+- `approve [task_id]`: Manually approve the proposed plan for a specific task. If `task_id` is omitted, it shows a list of tasks awaiting plan approval.
+- `send [task_id] message`: Send a manual message to a task's Jules session. If `task_id` is omitted, it shows a list of active tasks. If your message contains spaces and you omit `task_id`, the message must be quoted (e.g., `jules-agent send "hello world"`).
+- `feedback [task_id]`: Enter an interactive feedback loop with Codex to refine a task's plan or reply. If `task_id` is omitted, it shows a list of eligible tasks.
+- `review [task_id]`: Manually run Codex review for a task with an open pull request. If `task_id` is omitted, it shows a list of tasks with open pull requests.
+- `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it shows a list of tasks with open pull requests.
 - `next`: Dispatch the next task in a sequential run.
 
 ### Global Flags
@@ -130,6 +130,7 @@ Jules dispatch result(s): 2
 If Codex fails, the command exits non-zero and includes the command plus captured stdout and stderr.
 If a Jules dispatch fails, the CLI prints `failure` for that subtask, shows the captured command output, and exits non-zero after the first failure.
 If confirmation mode is enabled and stdin is not interactive, the CLI exits with an error and tells you to use `--no-confirm`.
+If a command is run without a `task_id` and stdin is not interactive, the CLI exits with an error.
 
 ## How It Works
 

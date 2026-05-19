@@ -9,7 +9,8 @@ from ...config import Config
 from ...github import GitHubClient
 from ...models import State
 from ...persistence import save_state
-from ..state import resolve_task, extract_pull_request_number, sync_task_state
+from ..io import select_task_interactively
+from ..state import get_candidates, resolve_task, extract_pull_request_number, sync_task_state
 
 
 def handle_merge(
@@ -24,16 +25,22 @@ def handle_merge(
     if not github_client:
         parser.exit(1, "Error: GITHUB_TOKEN is not set. Merging requires GitHub access.\n")
 
-    run, task = resolve_task(state, args.task_id)
+    if args.task_id:
+        run, task = resolve_task(state, args.task_id)
+        task_id_for_print = args.task_id
+    else:
+        candidates = get_candidates(state, "merge")
+        run, task = select_task_interactively(candidates, "merge")
+        task_id_for_print = f"{run.id}:{task.id}"
 
     # sync first
     sync_task_state(client, github_client, state, run, task, cwd)
 
-    if task.status != "pr_created":
-        parser.exit(1, f"Error: Task {args.task_id} is in status {task.status!r}, but 'pr_created' is required to merge.\n")
+    if task.status not in ("pr_created", "waiting_human_review"):
+        parser.exit(1, f"Error: Task {task_id_for_print} is in status {task.status!r}, but 'pr_created' or 'waiting_human_review' is required to merge.\n")
 
     if not task.pull_request or not task.pull_request.url:
-        parser.exit(1, f"Error: Task {args.task_id} does not have an associated pull request URL.\n")
+        parser.exit(1, f"Error: Task {task_id_for_print} does not have an associated pull request URL.\n")
 
     pull_number = extract_pull_request_number(task.pull_request.url)
     if pull_number is None:

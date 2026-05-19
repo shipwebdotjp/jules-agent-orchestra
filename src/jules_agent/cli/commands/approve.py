@@ -7,7 +7,8 @@ from pathlib import Path
 from ...client import JulesClient
 from ...models import State
 from ...persistence import save_state
-from ..state import resolve_task
+from ..io import select_task_interactively
+from ..state import get_candidates, resolve_task
 
 
 def handle_approve(
@@ -17,13 +18,20 @@ def handle_approve(
     cwd: Path,
     parser: argparse.ArgumentParser,
 ) -> int:
-    _run, task = resolve_task(state, args.task_id)
+    if args.task_id:
+        _run, task = resolve_task(state, args.task_id)
+        task_id_for_print = args.task_id
+    else:
+        candidates = get_candidates(state, "approve")
+        _run, task = select_task_interactively(candidates, "approve")
+        task_id_for_print = f"{_run.id}:{task.id}"
+
     if not task.jules:
         parser.exit(
-            1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
+            1, f"Error: Task {task_id_for_print} has not been dispatched yet.\n"
         )
 
-    print(f"Approving plan for task {args.task_id}...")
+    print(f"Approving plan for task {task_id_for_print}...")
     client.approve_plan(task.jules.session_name)
     task.status = "plan_approved"
     task.updated_at = (
