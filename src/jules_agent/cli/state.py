@@ -220,10 +220,11 @@ def sync_task_state(
             updated = True
 
     if updated:
+        reopened_from_completed = previous_run_status == "completed"
         run.status = get_run_sync_status(
             run,
             previous_status=previous_run_status,
-            reopened_from_completed=False,  # Context-specific: sync doesn't know if we just came from completed
+            reopened_from_completed=reopened_from_completed,
         )
         run.updated_at = (
             datetime.datetime.now(datetime.timezone.utc)
