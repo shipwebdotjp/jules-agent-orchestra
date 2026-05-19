@@ -91,21 +91,6 @@ def format_review_sticky_comment(
         "",
     ]
 
-    if findings:
-        lines.append("### Findings")
-        for f in findings:
-            file = f.get("file")
-            line = f.get("line")
-            msg = f.get("message")
-            line_info = f" (line {line})" if line else ""
-            lines.append(f"- **{file}**{line_info}: {msg}")
-        lines.append("")
-
-    lines.extend([
-        "### Next Steps",
-        next_steps,
-    ])
-
     return "\n".join(lines)
 
 
@@ -164,8 +149,25 @@ def apply_review_result(
 
     if status == "changes_requested":
         task.status = "needs_fix"
-        # Post fix request
-        fix_msg = f"@jules please fix the following issues found in the review:\n\n{summary}\n\nNext steps: {next_steps}"
+        lines = [
+            f"@jules\n\n",
+            "Verify each finding against current code. Fix only still-valid issues, skip the rest with a brief reason, keep changes minimal, and validate.\n",
+            "Do not apply speculative fixes.\n",
+            "Preserve existing architecture unless the finding requires a structural change.\n",
+            "### Summary",
+            result.get("summary", ""),
+            "### Findings",
+        ]
+        for f in result.get("findings", []):
+            file = f.get("file")
+            line = f.get("line")
+            msg = f.get("message")
+            line_info = f" (line {line})" if line else ""
+            lines.append(f"- **{file}**{line_info}: {msg}")
+        lines.append("### Next Steps")
+        lines.append(result.get("next_steps", ""))
+
+        fix_msg = "\n".join(lines)
         try:
             github_client.post_issue_comment(repo, issue_number, fix_msg)
         except Exception as e:
