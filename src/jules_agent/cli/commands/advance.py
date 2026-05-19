@@ -7,7 +7,7 @@ from ...client import JulesClient
 from ...config import Config
 from ...github import GitHubClient
 from ...models import State, Task, TaskStatus
-from ...pipeline import save_state
+from ...persistence import save_state
 from ..state import sync_task
 from .sync import handle_sync
 from .feedback import run_feedback_loop

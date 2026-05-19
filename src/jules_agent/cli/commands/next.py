@@ -9,9 +9,9 @@ from ...client import JulesClient
 from ...models import JulesSessionInfo, State
 from ...pipeline import (
     find_source_name,
-    get_git_branch,
-    save_state,
 )
+from ...git import get_git_branch
+from ...persistence import save_state
 from ..state import get_jules_state_mapping
 
 

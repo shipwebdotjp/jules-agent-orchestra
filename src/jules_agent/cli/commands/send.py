@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ...client import JulesClient
 from ...models import State
-from ...pipeline import save_state
+from ...persistence import save_state
 from ..state import resolve_task
 
 

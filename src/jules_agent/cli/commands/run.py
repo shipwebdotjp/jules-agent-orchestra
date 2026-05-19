@@ -9,19 +9,16 @@ from ...client import JulesClient
 from ...models import ExecutionPlan, JulesSessionInfo, Run, State, Task
 from ...config import Config
 from ...pipeline import (
-    ClarificationExchange,
-    CommandRunner,
     build_clarified_task_prompt,
     identify_clarifications,
     decompose_task,
     find_source_name,
     format_subtask_for_jules,
-    generate_run_id,
-    get_git_branch,
-    run_command,
-    save_state,
     validate_plan,
 )
+from ...codex import ClarificationExchange
+from ...git import CommandRunner, get_git_branch, run_command
+from ...persistence import generate_run_id, save_state
 from ..io import (
     build_review_prompt,
     prompt_for_clarification_answer,

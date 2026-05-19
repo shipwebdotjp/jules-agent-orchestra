@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 
 from ..models import ExecutionPlan
-from ..pipeline import ClarificationQuestion, PipelineError, format_subtask_for_jules
+from ..pipeline import format_subtask_for_jules
+from ..codex import ClarificationQuestion, PipelineError
 
 
 def build_review_prompt(task: str, feedback_history: list[str]) -> str:

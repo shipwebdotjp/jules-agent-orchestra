@@ -36,12 +36,11 @@ from ..models import (
     State,
 )
 from ..pipeline import (
-    PipelineError,
-    get_git_remote_repo,
-    get_git_root,
-    load_state,
     suggest_reply,
 )
+from ..codex import PipelineError
+from ..git import get_git_remote_repo, get_git_root
+from ..persistence import load_state
 
 # Re-exporting for backward compatibility and tests
 __all__ = [

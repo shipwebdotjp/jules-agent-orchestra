@@ -1,149 +1,53 @@
 from __future__ import annotations
 
-import json
-import re
-import subprocess
-import tempfile
 import datetime
+import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
 from .client import JulesAPIError, JulesClient
+from .codex import (
+    ClarificationExchange,
+    ClarificationPrompt,
+    ClarificationQuestion,
+    PipelineError,
+    call_codex,
+    parse_json_document,
+)
+from .git import (
+    CommandRunner,
+    get_git_branch,
+    get_git_remote_repo,
+    get_git_root,
+    is_git_repo,
+    run_command,
+)
 from .github import GitHubClient
 from .models import (
     DispatchResult,
     ExecutionPlan,
-    ProjectState,
     Run,
     State,
     Subtask,
     Task,
-    TaskReview,
-    TaskReviewAttempt,
+)
+from .persistence import generate_run_id, load_state, save_state
+from .review import (
+    apply_review_result,
+    format_review_sticky_comment,
+    get_review_diff,
+    is_task_eligible_for_review,
+    run_codex_review,
+    update_sticky_comment,
 )
 
-
-CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
 
 SUPPORTED_STRATEGIES = {
     "single_session",
     "parallel_subtasks",
     "sequential_subtasks",
 }
-
-
-class PipelineError(RuntimeError):
-    pass
-
-
-@dataclass(frozen=True)
-class ClarificationQuestion:
-    question: str
-    options: list[str]
-
-
-@dataclass(frozen=True)
-class ClarificationExchange:
-    question: str
-    options: list[str]
-    answer: str
-
-
-@dataclass(frozen=True)
-class ClarificationPrompt:
-    has_questions: bool
-    questions: list[ClarificationQuestion]
-
-
-def run_command(
-    args: Sequence[str],
-    *,
-    cwd: Path | None = None,
-    input_text: str | None = None,
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        list(args),
-        cwd=str(cwd) if cwd is not None else None,
-        input=input_text,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
-def get_git_root(cwd: Path) -> Path:
-    try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if completed.returncode == 0:
-            return Path(completed.stdout.strip())
-    except OSError:
-        pass
-    return cwd
-
-
-def is_git_repo(cwd: Path) -> bool:
-    try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return False
-    return completed.returncode == 0 and completed.stdout.strip() == "true"
-
-
-def get_git_branch(cwd: Path) -> str:
-    try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if completed.returncode == 0:
-            return completed.stdout.strip()
-    except OSError:
-        pass
-    return "main"
-
-
-def get_git_remote_repo(cwd: Path) -> tuple[str, str] | None:
-    try:
-        completed = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if completed.returncode != 0:
-            return None
-        url = completed.stdout.strip()
-        # Matches patterns like:
-        # https://github.com/owner/repo.git
-        # git@github.com:owner/repo.git
-        patterns = [
-            r"github\.com[:/]([^/]+)/([^/.]+)(?:\.git)?$",
-            r"https?://[^/]+/([^/]+)/([^/.]+)(?:\.git)?$",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, url)
-            if match:
-                return match.group(1), match.group(2)
-    except OSError:
-        pass
-    return None
 
 
 def build_codex_prompt(task: str) -> str:
@@ -223,31 +127,6 @@ def clarification_schema() -> dict[str, object]:
         },
         "required": ["has_questions", "questions"],
     }
-
-
-def parse_json_document(text: str) -> object:
-    stripped = text.strip()
-    if not stripped:
-        raise PipelineError("Codex returned an empty response.")
-
-    if stripped.startswith("```"):
-        stripped = re.sub(
-            r"^```(?:json)?\s*|\s*```$", "", stripped, flags=re.IGNORECASE | re.DOTALL
-        ).strip()
-
-    try:
-        return json.loads(stripped)
-    except json.JSONDecodeError:
-        decoder = json.JSONDecoder()
-        for index, char in enumerate(stripped):
-            if char not in "{[":
-                continue
-            try:
-                payload, _ = decoder.raw_decode(stripped[index:])
-            except json.JSONDecodeError:
-                continue
-            return payload
-    raise PipelineError("Could not parse JSON from Codex output.")
 
 
 def normalize_subtasks(payload: object) -> list[Subtask]:
@@ -473,51 +352,6 @@ def build_clarified_task_prompt(
     return prompt
 
 
-def call_codex(
-    prompt: str,
-    schema: dict[str, object],
-    *,
-    cwd: Path,
-    codex_bin: str = "codex",
-    runner: CommandRunner = run_command,
-) -> object:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        schema_path = tmpdir_path / "codex-schema.json"
-        last_message_path = tmpdir_path / "codex-last-message.txt"
-        schema_path.write_text(json.dumps(schema, indent=2), encoding="utf-8")
-
-        args = [
-            codex_bin,
-            "exec",
-            "--ephemeral",
-            "--output-schema",
-            str(schema_path),
-            "--output-last-message",
-            str(last_message_path),
-        ]
-        if not is_git_repo(cwd):
-            args.append("--skip-git-repo-check")
-        args.append(prompt)
-
-        completed = runner(args, cwd=cwd)
-        if completed.returncode != 0:
-            sanitized_args = list(args[:-1]) + ["<REDACTED_PROMPT>"]
-            raise PipelineError(
-                "Codex call failed.\n"
-                f"Command: {' '.join(sanitized_args)}\n"
-                f"stdout:\n{completed.stdout}\n"
-                f"stderr:\n{completed.stderr}"
-            )
-
-        response_text = ""
-        if last_message_path.exists():
-            response_text = last_message_path.read_text(encoding="utf-8").strip()
-        if not response_text:
-            response_text = (completed.stdout or "").strip()
-        return parse_json_document(response_text)
-
-
 def decompose_task(
     task: str,
     *,
@@ -554,54 +388,6 @@ def format_subtask_for_jules(subtask: Subtask) -> str:
 
     return "\n".join(parts)
 
-
-def codex_review_schema() -> dict[str, object]:
-    return {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "status": {
-                "type": "string",
-                "enum": ["pass", "changes_requested"],
-            },
-            "summary": {"type": "string", "minLength": 1},
-            "findings": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "file": {"type": "string"},
-                        "line": {"type": "integer"},
-                        "message": {"type": "string"},
-                    },
-                    "required": ["file", "line","message"],
-                },
-            },
-            "next_steps": {"type": "string"},
-        },
-        "required": ["status", "summary", "findings", "next_steps"],
-    }
-
-def run_codex_review(
-    prompt: str,
-    *,
-    cwd: Path,
-    codex_bin: str = "codex",
-    runner: CommandRunner = run_command,
-) -> dict[str, Any]:
-    payload = call_codex(
-        prompt,
-        codex_review_schema(),
-        cwd=cwd,
-        codex_bin=codex_bin,
-        runner=runner,
-    )
-
-    if not isinstance(payload, dict):
-        raise PipelineError("Codex review failed: payload is not a dictionary.")
-
-    return payload
 
 def build_suggestion_prompt(
     task_description: str,
@@ -863,52 +649,6 @@ class PipelineOutcome:
         return self.plan.tasks
 
 
-def load_state(cwd: Path) -> State | None:
-    root = get_git_root(cwd)
-    state_path = root / ".jules-agent" / "state.json"
-    if not state_path.exists():
-        return None
-    try:
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-        return State.from_dict(data)
-    except (json.JSONDecodeError, KeyError, OSError):
-        return None
-
-
-def save_state(cwd: Path, state: State) -> None:
-    root = get_git_root(cwd)
-    state_dir = root / ".jules-agent"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    state_path = state_dir / "state.json"
-
-    # Use atomic write: write to .tmp then rename
-    tmp_path = state_path.with_suffix(".json.tmp")
-    data = state.to_dict()
-    tmp_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    tmp_path.rename(state_path)
-
-
-def generate_run_id(state: State) -> str:
-    now = datetime.datetime.now()
-    date_str = now.strftime("%Y%m%d")
-
-    # Count existing runs for today to determine sequence number
-    today_prefix = f"run_{date_str}_"
-    max_seq = 0
-    for run in state.runs:
-        if run.id.startswith(today_prefix):
-            try:
-                seq = int(run.id[len(today_prefix) :])
-                if seq > max_seq:
-                    max_seq = seq
-            except ValueError:
-                continue
-
-    return f"run_{date_str}_{max_seq + 1:03d}"
-
-
 def run_pipeline(
     task: str,
     *,
@@ -933,166 +673,6 @@ def run_pipeline(
         strategy=plan.strategy,
     )
     return PipelineOutcome(task=task, plan=plan, dispatches=dispatches)
-
-def get_review_diff(
-    cwd: Path,
-    repo: str,
-    base_sha: str,
-    head_sha: str,
-    previous_head_sha: str | None,
-    github_client: GitHubClient,
-) -> str:
-    diff_pairs = [(base_sha, head_sha)]
-    if previous_head_sha and previous_head_sha != base_sha:
-        diff_pairs.append((previous_head_sha, head_sha))
-
-    full_diff = ""
-    for base, head in diff_pairs:
-        # Try local git first
-        try:
-            completed = subprocess.run(
-                ["git", "diff", f"{base}...{head}"],
-                cwd=str(cwd),
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if completed.returncode == 0 and completed.stdout.strip():
-                full_diff += completed.stdout
-                continue
-        except OSError:
-            pass
-
-        # Fallback to GitHub
-        try:
-            compare = github_client.compare_commits(repo, base, head)
-            files = compare.get("files", [])
-            for f in files:
-                patch = f.get("patch")
-                if patch:
-                    filename = f.get("filename")
-                    full_diff += f"diff --git a/{filename} b/{filename}\n"
-                    full_diff += patch + "\n"
-        except Exception as e:
-            print(f"Warning: Failed to fetch diff from GitHub for {base}...{head}: {e}")
-
-    return full_diff
-
-
-def format_review_sticky_comment(
-    task: Task,
-    status: str,
-    attempt: int,
-    head_sha: str,
-    summary: str,
-    next_steps: str,
-    findings: list[dict[str, Any]] | None = None,
-) -> str:
-    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    emoji = "✅" if status == "pass" else "❌"
-    status_text = "Passed" if status == "pass" else "Changes Requested"
-
-    lines = [
-        f"## Codex Review Results {emoji}",
-        f"- **Status**: {status_text}",
-        f"- **Attempt**: {attempt} / {task.max_attempts}",
-        f"- **Head SHA**: `{head_sha}`",
-        f"- **Updated At**: {now}",
-        "",
-        "### Summary",
-        summary,
-        "",
-    ]
-
-    if findings:
-        lines.append("### Findings")
-        for f in findings:
-            file = f.get("file")
-            line = f.get("line")
-            msg = f.get("message")
-            line_info = f" (line {line})" if line else ""
-            lines.append(f"- **{file}**{line_info}: {msg}")
-        lines.append("")
-
-    lines.extend([
-        "### Next Steps",
-        next_steps,
-    ])
-
-    return "\n".join(lines)
-
-
-def update_sticky_comment(
-    github_client: GitHubClient,
-    repo: str,
-    issue_number: int,
-    body: str,
-    task: Task,
-) -> None:
-    if task.review and task.review.sticky_comment_id:
-        try:
-            github_client.update_issue_comment(repo, task.review.sticky_comment_id, body)
-            return
-        except Exception as e:
-            print(f"Warning: Failed to update existing sticky comment: {e}")
-
-    # Create new comment
-    try:
-        comment = github_client.post_issue_comment(repo, issue_number, body)
-        if not task.review:
-            task.review = TaskReview()
-        task.review.sticky_comment_id = comment.get("id")
-        task.review.sticky_comment_url = comment.get("html_url")
-    except Exception as e:
-        print(f"Warning: Failed to post sticky comment: {e}")
-        raise
-
-
-def apply_review_result(
-    task: Task,
-    result: dict[str, Any],
-    head_sha: str,
-    github_client: GitHubClient,
-    repo: str,
-    issue_number: int,
-) -> None:
-    status = result["status"]
-    summary = result["summary"]
-    next_steps = result["next_steps"]
-
-    # Update task status and attempts
-    task.attempts += 1
-
-    attempt = TaskReviewAttempt(
-        head_sha=head_sha,
-        created_at=datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
-        status=status,  # type: ignore
-        summary=summary,
-        next_steps=next_steps,
-    )
-
-    if not task.review:
-        task.review = TaskReview()
-    task.review.attempts.append(attempt)
-
-    if status == "changes_requested":
-        task.status = "needs_fix"
-        # Post fix request
-        fix_msg = f"@jules please fix the following issues found in the review:\n\n{summary}\n\nNext steps: {next_steps}"
-        try:
-            github_client.post_issue_comment(repo, issue_number, fix_msg)
-        except Exception as e:
-            print(f"Warning: Failed to post fix request comment: {e}")
-            raise
-    else:
-        task.status = "waiting_human_review"
-
-    task.updated_at = (
-        datetime.datetime.now(datetime.timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
 
 
 def perform_task_review(
@@ -1155,6 +735,17 @@ def perform_task_review(
         f"- `next_steps`: concrete next action for the implementer\n"
     )
 
+    print(f"Posting 'In Progress' sticky comment for task {task.id}...")
+    in_progress_body = format_review_sticky_comment(
+        task=task,
+        status="in_progress",
+        attempt=task.attempts + 1,
+        head_sha=head_sha,
+        summary="Codex review is currently in progress...",
+        next_steps="Please wait for the review to complete.",
+    )
+    update_sticky_comment(github_client, repo, issue_number, in_progress_body, task)
+
     print(f"Calling Codex for review of task {task.id}...")
     prev_status = task.status
     task.status = "codex_reviewing"
@@ -1163,6 +754,16 @@ def perform_task_review(
     try:
         result = run_codex_review(prompt, cwd=cwd, codex_bin=codex_bin)
     except Exception as e:
+        # Post error sticky comment
+        error_body = format_review_sticky_comment(
+            task=task,
+            status="error",
+            attempt=task.attempts + 1,
+            head_sha=head_sha,
+            summary="Codex review failed",
+            next_steps="See pipeline logs and retry or investigate.",
+        )
+        update_sticky_comment(github_client, repo, issue_number, error_body, task)
         # Revert status on failure
         task.status = prev_status
         save_state(cwd, state)
@@ -1185,30 +786,3 @@ def perform_task_review(
     # Apply results to task state
     apply_review_result(task, result, head_sha, github_client, repo, issue_number)
     save_state(cwd, state)
-
-
-def is_task_eligible_for_review(
-    task: Task,
-    pull_request_data: dict[str, Any],
-) -> tuple[bool, str | None]:
-    if pull_request_data.get("state") != "open":
-        return False, "Pull request is not open."
-    if pull_request_data.get("draft"):
-        return False, "Pull request is a draft."
-
-    if task.status in ("codex_reviewing", "jules_fixing"):
-        return False, f"Task is already in {task.status} status."
-
-    current_head_sha = pull_request_data.get("head", {}).get("sha")
-    if not current_head_sha:
-        return False, "Could not determine current head SHA."
-
-    if task.review:
-        seen_shas = {a.head_sha for a in task.review.attempts}
-        if current_head_sha in seen_shas:
-            return False, f"Head SHA {current_head_sha} has already been reviewed."
-
-    if task.attempts >= task.max_attempts:
-        return False, f"Task has reached maximum review attempts ({task.max_attempts})."
-
-    return True, None
