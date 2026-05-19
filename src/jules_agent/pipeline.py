@@ -479,7 +479,6 @@ def suggest_reply(
         feedback_history,
         is_awaiting_plan_approval=is_awaiting_plan_approval,
     )
-    print(f"DEBUG: prompt for Codex suggestion:\n{prompt}\n")
     payload = call_codex(
         prompt,
         suggestion_schema(),

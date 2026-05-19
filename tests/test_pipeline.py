@@ -186,6 +186,8 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cwd = Path(tmpdir)
             subprocess.run(["git", "init"], cwd=cwd, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
             subprocess.run(
                 ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
                 cwd=cwd,
@@ -237,6 +239,8 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cwd = Path(tmpdir)
             subprocess.run(["git", "init"], cwd=cwd, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
             subprocess.run(
                 ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
                 cwd=cwd,

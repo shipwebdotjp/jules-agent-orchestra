@@ -43,7 +43,6 @@ def handle_sync(
         if github_client and has_pr_created_tasks and run.status == "completed":
             should_sync_run = True
 
-        print(f"DEBUG: Processing run {run.id} (status: {run.status}), should_sync: {should_sync_run}")
         if should_sync_run:
             previous_status = run.status
             reopened_from_completed = (
@@ -56,7 +55,6 @@ def handle_sync(
             for task in run.tasks:
                 if task.status == "pr_created":
                     if not skip_pr_sync:
-                        print(f"DEBUG: Syncing pr_created task {task.id}. GitHub client: {github_client is not None}")
                         if github_client and sync_pr_created_task(
                             github_client,
                             state.project.repo,
@@ -90,5 +88,6 @@ def handle_sync(
                 )
 
     save_state(cwd, state)
-    print(f"Synced {updated_count} tasks.")
+    if not getattr(args, "json", False):
+        print(f"Synced {updated_count} tasks.")
     return 0

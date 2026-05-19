@@ -42,8 +42,8 @@ jules-agent [flags] <command> [args]
   - In interactive mode, it may first ask clarification questions before generating a plan.
 - `status`: Show the current local state, including runs and tasks. Use `--show-activities` to see the session history.
 - `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
-- `advance [--auto]`: Automatically or interactively advance work across the next active task.
-    - In `--auto` mode, it will auto-approve plans (if recommended by Codex) and send auto-replies.
+- `advance [flags]`: Automatically or interactively advance work across the next active task.
+- `cron [flags]`: Non-interactive background execution. This is a purely automated version of `advance` that never asks for input.
 - `approve <task_id>`: Manually approve the proposed plan for a specific task.
 - `send <task_id> <message>`: Send a manual message to a task's Jules session.
 - `feedback <task_id>`: Enter an interactive feedback loop with Codex to refine a task's plan or reply.
@@ -56,6 +56,14 @@ jules-agent [flags] <command> [args]
 - `--repo owner/name`: Override the target repository.
 - `--codex-bin /path/to/codex`: Use a specific Codex executable.
 - `--config /path/to/config.toml`: Specify a custom configuration file.
+
+### Automation Flags (for `advance` and `cron`)
+
+- `--auto-plan-approval`: Automatically approve plans when recommended by Codex.
+- `--auto-feedback`: Automatically send suggested feedback messages.
+- `--auto-merge`: Automatically merge pull requests when they are ready.
+- `--auto`: Enable both plan approval and feedback (does NOT include merge).
+- `--json`: Emit the result as a single JSON object.
 
 ### Examples
 
@@ -77,7 +85,11 @@ jules-agent advance --auto
 4. `./jules-agent.toml`
 5. A custom file specified via `--config`
 
-Settings in the configuration file have lower priority than environment variables and command-line flags.
+Settings in the configuration file have lower priority than environment variables and command-line flags. For automation flags, the priority is:
+1. Individual CLI flag (e.g., `--auto-merge`)
+2. The `--auto` flag (sets approval and feedback to true)
+3. Configuration file settings
+4. Default values (auto_plan_approval=true, others=false)
 
 ### GitHub Token
 

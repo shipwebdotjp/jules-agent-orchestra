@@ -147,7 +147,7 @@ class TestAdvance(unittest.TestCase):
     @patch("jules_agent.cli.advance_core.sync_task")
     @patch("jules_agent.cli.commands.feedback.run_feedback_loop")
     @patch("jules_agent.cli.advance_core.save_state")
-    def test_handle_advance_no_save_on_sync_failure(
+    def test_handle_advance_save_even_on_sync_failure(
         self, mock_save, mock_feedback_loop, mock_sync_task, mock_sync
     ):
         mock_sync.return_value = 0
@@ -186,7 +186,7 @@ class TestAdvance(unittest.TestCase):
 
         mock_feedback_loop.assert_called_once()
         mock_sync_task.assert_called_once()
-        mock_save.assert_not_called()
+        mock_save.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()
