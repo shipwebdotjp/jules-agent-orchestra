@@ -15,7 +15,7 @@ from typing import Any, Literal
 from ..client import JulesClient
 from ..config import Config
 from ..github import GitHubClient
-from ..models import State, Task, TaskStatus
+from ..models import State, Task, TaskStatus, Run
 from ..persistence import save_state
 from .state import sync_task, extract_pull_request_number
 
