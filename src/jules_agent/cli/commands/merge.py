@@ -9,7 +9,7 @@ from ...config import Config
 from ...github import GitHubClient
 from ...models import State
 from ...persistence import save_state
-from ..state import resolve_task, extract_pull_request_number
+from ..state import resolve_task, extract_pull_request_number, sync_task
 
 
 def handle_merge(
@@ -25,6 +25,9 @@ def handle_merge(
         parser.exit(1, "Error: GITHUB_TOKEN is not set. Merging requires GitHub access.\n")
 
     _run, task = resolve_task(state, args.task_id)
+
+    # sync first
+    sync_task(client, task)
 
     if task.status != "pr_created":
         parser.exit(1, f"Error: Task {args.task_id} is in status {task.status!r}, but 'pr_created' is required to merge.\n")

@@ -34,11 +34,12 @@ def get_review_diff(
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=30,
             )
             if completed.returncode == 0 and completed.stdout.strip():
                 full_diff += completed.stdout
                 continue
-        except OSError:
+        except (OSError, subprocess.TimeoutExpired):
             pass
 
         # Fallback to GitHub

@@ -14,7 +14,7 @@
   - `--auto` は plan approval と feedback のみを有効化し、merge は含めない。mergeを自動実行したい場合は`--auto-merge`が必要。
 - Config:
   - 既存デフォルトは維持する。つまり `auto_plan_approval=true`, `auto_feedback=false`, `auto_merge=false`。
-  - 優先順位は `config` → `--auto` → 個別CLIフラグ/`--no-*`。個別指定が最優先。
+  - 優先順位は `config` → `--auto` → 個別CLIフラグ。個別指定が最優先。
 - Execution:
   - 開始時に必ず `sync` する。`cron` でも PR sync を含める。
   - `cron` は stdin/TTY を使わない。人間判断が必要な場合は何もせず exit `0`。
