@@ -610,30 +610,59 @@ def build_suggestion_prompt(
     is_awaiting_plan_approval: bool = False,
 ) -> str:
     prompt = (
-        "You are an assistant helping a user provide feedback to Jules, an AI software engineer.\n"
-        "Jules is working on the following task:\n"
-        f"{task_description}\n\n"
-        "Here is the activity history of the Jules session:\n"
-        f"{activities_formatted}\n\n"
+        "<role>\n"
+        "You are an assistant helping a user provide feedback to Jules, "
+        "an AI software engineer.\n"
+        "</role>\n\n"
+        "<task>\n"
+        f"{task_description}\n"
+        "</task>\n\n"
+        "<activity_history>\n"
+        f"{activities_formatted}\n"
+        "</activity_history>\n\n"
     )
 
     if is_awaiting_plan_approval:
         prompt += (
+            "<instruction>\n"
             "The session is currently awaiting plan approval. "
-            "Please evaluate the generated plan. If it looks correct and ready to proceed, "
+            "Evaluate the generated plan. If it looks correct and ready to proceed, "
             "set 'approval_recommended' to true. Otherwise, set it to false and provide "
-            "a suggestion to fix the plan.\n\n"
+            "a suggestion to fix the plan.\n"
+            "</instruction>\n\n"
         )
 
     if feedback_history:
-        prompt += "The user has provided the following feedback on your previous suggestions:\n"
+        prompt += "<previous_feedback>\n"
         for i, feedback in enumerate(feedback_history, start=1):
             prompt += f"{i}. {feedback}\n"
-        prompt += "\nPlease provide a revised suggestion that addresses this feedback.\n"
+        prompt += "</previous_feedback>\n\n"
+        prompt += (
+            "<instruction>\n"
+            "Provide a revised suggestion that addresses the feedback above.\n"
+            "</instruction>\n\n"
+        )
     else:
-        prompt += "Based on the activity history, suggest a message for the user to send to Jules to move the task forward.\n"
+        if "I have implemented" in activities_formatted:
+            prompt += (
+                "<instruction>\n"
+                "Jules has completed the implementation and is asking for confirmation "
+                "before proceeding to final validation.\n"
+                "Evaluate whether Jules's proposed next steps are appropriate. "
+                "If they are, suggest a message that confirms and tells Jules to proceed. "
+                "If there are concerns, suggest a message that provides specific corrections.\n"
+                "Do NOT suggest expanding the scope beyond what was originally requested.\n"
+                "</instruction>\n\n"
+            )
+        else:
+            prompt += (
+                "<instruction>\n"
+                "Based on the activity history, suggest a message for the user "
+                "to send to Jules to move the task forward.\n"
+                "</instruction>\n\n"
+            )
 
-    prompt += "\nReturn your suggestion in JSON format."
+    prompt += "<output_format>\nReturn your suggestion in JSON format.\n</output_format>"
     return prompt
 
 
@@ -666,6 +695,7 @@ def suggest_reply(
         feedback_history,
         is_awaiting_plan_approval=is_awaiting_plan_approval,
     )
+    print(f"DEBUG: prompt for Codex suggestion:\n{prompt}\n")
     payload = call_codex(
         prompt,
         suggestion_schema(),
@@ -712,23 +742,28 @@ def format_activities(activities: list[dict[str, Any]]) -> str:
     for activity in activities:
         timestamp = activity.get("createTime", "unknown time")
         if "agentMessaged" in activity:
-            msg = activity["agentMessaged"].get("message", "")
+            msg = activity["agentMessaged"].get("agentMessage", "")
             lines.append(f"[{timestamp}] Jules: {msg}")
         elif "userMessaged" in activity:
-            msg = activity["userMessaged"].get("message", "")
+            msg = activity["userMessaged"].get("userMessage", "")
             lines.append(f"[{timestamp}] User: {msg}")
         elif "planGenerated" in activity:
             plan = activity["planGenerated"].get("plan", {})
             steps = plan.get("steps", [])
             lines.append(f"[{timestamp}] Jules generated a plan with {len(steps)} steps.")
             for i, step in enumerate(steps, 1):
+                title = step.get("title", "")
                 description = step.get("description", "")
-                lines.append(f"  {i}. {description}")
+                lines.append(f"  {i}. {title}: {description}")
         elif "planApproved" in activity:
             lines.append(f"[{timestamp}] Plan was approved.")
         elif "progressUpdated" in activity:
+            title = activity["progressUpdated"].get("title", "")
             description = activity["progressUpdated"].get("description", "")
-            lines.append(f"[{timestamp}] Progress: {description}")
+            if not title and description:
+                lines.append(f"[{timestamp}] Progress: {description}")
+            elif title:
+                lines.append(f"[{timestamp}] Progress: {title}")
         elif "sessionCompleted" in activity:
             lines.append(f"[{timestamp}] Session completed successfully.")
         elif "sessionFailed" in activity:
