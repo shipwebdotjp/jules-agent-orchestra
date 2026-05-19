@@ -74,6 +74,13 @@ def run_feedback_loop(
         activity_id = latest_activity.get("id") or latest_activity.get("name")
         suggestion_hash = hashlib.sha256(suggestion.encode("utf-8")).hexdigest()
 
+        def mark_advanced(action: str, feedback_hash: str | None = None):
+            task.advance_state["last_activity_id"] = activity_id
+            task.advance_state["last_advance_action"] = action
+            task.advance_state["last_advanced_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            if feedback_hash:
+                task.advance_state["last_feedback_hash"] = feedback_hash
+
         if first_iteration:
             last_activity_id = task.advance_state.get("last_activity_id")
             last_feedback_hash = task.advance_state.get("last_feedback_hash")
@@ -90,9 +97,7 @@ def run_feedback_loop(
                         output("Auto-approving plan as recommended by Codex...")
                     client.approve_plan(task.jules.session_name)
                     task.status = "plan_approved"
-                    task.advance_state["last_activity_id"] = activity_id
-                    task.advance_state["last_advance_action"] = "approve_plan"
-                    task.advance_state["last_advanced_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    mark_advanced("approve_plan")
                     return "completed"
                 else:
                     if interactive:
@@ -106,10 +111,7 @@ def run_feedback_loop(
                 if interactive:
                     output(f"Sending auto-reply:\n{suggestion}")
                 client.send_message(task.jules.session_name, suggestion)
-                task.advance_state["last_activity_id"] = activity_id
-                task.advance_state["last_feedback_hash"] = suggestion_hash
-                task.advance_state["last_advance_action"] = "send_message"
-                task.advance_state["last_advanced_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                mark_advanced("send_message", suggestion_hash)
                 return "completed"
 
             first_iteration = False
@@ -149,9 +151,11 @@ def run_feedback_loop(
                     output("Approving plan...")
                     client.approve_plan(task.jules.session_name)
                     task.status = "plan_approved"
+                    mark_advanced("approve_plan")
                 else:
                     output("Sending message to Jules...")
                     client.send_message(task.jules.session_name, suggestion)
+                    mark_advanced("send_message", suggestion_hash)
                 return "completed"
             elif answer == "f":
                 try:

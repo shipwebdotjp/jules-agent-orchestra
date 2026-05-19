@@ -45,12 +45,13 @@ class AdvanceEngine:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(lock_path, "a") as lock_file:
-            try:
-                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except (IOError, OSError):
-                if not self.output_json:
-                    print("Advance lock already held. Skipping.")
-                return 0
+            if fcntl is not None:
+                try:
+                    fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except (IOError, OSError):
+                    if not self.output_json:
+                        print("Advance lock already held. Skipping.")
+                    return 0
 
             return self._execute()
 
@@ -150,9 +151,10 @@ class AdvanceEngine:
             exit_code = 2
 
         if action_taken:
-            # Bump updated_at to ensure this task moves down in selection priority
+            # Update updated_at to a small delta in the past to lower selection priority
+            # (Selection logic is updated_at descending)
             target_task.updated_at = (
-                datetime.datetime.now(datetime.timezone.utc)
+                (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=1))
                 .isoformat()
                 .replace("+00:00", "Z")
             )
