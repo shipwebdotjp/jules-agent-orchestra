@@ -19,7 +19,8 @@ def handle_advance(
     config: Config,
 ) -> int:
     # 1. Sync state at command start
-    print("Syncing state...")
+    if not getattr(args, "json", False):
+        print("Syncing state...")
     sync_result = handle_sync(args, state, client, github_client, cwd, skip_pr_sync=True)
     if sync_result != 0:
         return sync_result

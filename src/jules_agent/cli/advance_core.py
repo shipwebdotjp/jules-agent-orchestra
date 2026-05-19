@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import fcntl
-import hashlib
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import json
 import os
 import sys
@@ -42,18 +44,15 @@ class AdvanceEngine:
         lock_path = self.cwd / ".jules-agent" / "advance.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
 
-        lock_file = open(lock_path, "a")
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except (IOError, OSError):
-            if not self.output_json:
-                print("Advance lock already held. Skipping.")
-            return 0
+        with open(lock_path, "a") as lock_file:
+            try:
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (IOError, OSError):
+                if not self.output_json:
+                    print("Advance lock already held. Skipping.")
+                return 0
 
-        try:
             return self._execute()
-        finally:
-            lock_file.close()
 
     def _execute(self) -> int:
         selected = self._select_task()
@@ -151,14 +150,20 @@ class AdvanceEngine:
             exit_code = 2
 
         if action_taken:
-            # Sync to get latest state from server before saving
-            if sync_task(self.client, target_task):
-                target_task.updated_at = (
-                    datetime.datetime.now(datetime.timezone.utc)
-                    .isoformat()
-                    .replace("+00:00", "Z")
-                )
-                save_state(self.cwd, self.state)
+            # Bump updated_at to ensure this task moves down in selection priority
+            target_task.updated_at = (
+                datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+            # Sync to get latest state from server, but keep local status if it was changed to blocked or merged
+            local_status = target_task.status
+            sync_task(self.client, target_task)
+            if local_status in ("blocked", "merged"):
+                target_task.status = local_status
+
+            # Always save state after an action to persist advance_state updates (e.g. idempotency keys)
+            save_state(self.cwd, self.state)
 
         if self.output_json:
             print(json.dumps({

@@ -40,14 +40,16 @@ def run_feedback_loop(
 
     while True:
         if not sync_task(client, task):
-            output(
-                "Error: Failed to sync task state. Please check your connection and try again."
-            )
+            if interactive:
+                output(
+                    "Error: Failed to sync task state. Please check your connection and try again."
+                )
             return "failed"
 
         is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
 
-        output("\nFetching suggestion from Codex...")
+        if interactive:
+            output("\nFetching suggestion from Codex...")
         try:
             activities = list(client.list_activities(task.jules.session_name))
             result = suggest_reply(
@@ -69,7 +71,7 @@ def run_feedback_loop(
 
         # Idempotency check using advance_state
         latest_activity = activities[-1] if activities else {}
-        activity_id = latest_activity.get("name") or latest_activity.get("id")
+        activity_id = latest_activity.get("id") or latest_activity.get("name")
         suggestion_hash = hashlib.sha256(suggestion.encode("utf-8")).hexdigest()
 
         if first_iteration:
@@ -80,10 +82,12 @@ def run_feedback_loop(
             if is_awaiting_plan_approval and auto_plan_approval:
                 if approval_recommended:
                     if last_activity_id == activity_id and last_advance_action == "approve_plan":
-                        output("Plan already approved for this activity. Skipping.")
+                        if interactive:
+                            output("Plan already approved for this activity. Skipping.")
                         return "completed"
 
-                    output("Auto-approving plan as recommended by Codex...")
+                    if interactive:
+                        output("Auto-approving plan as recommended by Codex...")
                     client.approve_plan(task.jules.session_name)
                     task.status = "plan_approved"
                     task.advance_state["last_activity_id"] = activity_id
@@ -91,13 +95,16 @@ def run_feedback_loop(
                     task.advance_state["last_advanced_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     return "completed"
                 else:
-                    output("Codex does not recommend auto-approval. Falling back to interactive mode.")
+                    if interactive:
+                        output("Codex does not recommend auto-approval. Falling back to interactive mode.")
             elif not is_awaiting_plan_approval and auto_feedback:
                 if last_activity_id == activity_id and last_feedback_hash == suggestion_hash:
-                    output("Feedback already sent for this activity. Skipping.")
+                    if interactive:
+                        output("Feedback already sent for this activity. Skipping.")
                     return "completed"
 
-                output(f"Sending auto-reply:\n{suggestion}")
+                if interactive:
+                    output(f"Sending auto-reply:\n{suggestion}")
                 client.send_message(task.jules.session_name, suggestion)
                 task.advance_state["last_activity_id"] = activity_id
                 task.advance_state["last_feedback_hash"] = suggestion_hash
