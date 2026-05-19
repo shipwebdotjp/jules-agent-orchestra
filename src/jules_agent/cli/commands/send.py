@@ -5,19 +5,23 @@ import datetime
 from pathlib import Path
 
 from ...client import JulesClient
+from ...github import GitHubClient
 from ...models import State
 from ...persistence import save_state
-from ..state import resolve_task
+from ..state import resolve_task, sync_task_state
 
 
 def handle_send(
     args: argparse.Namespace,
     state: State,
     client: JulesClient,
+    github_client: GitHubClient | None,
     cwd: Path,
     parser: argparse.ArgumentParser,
 ) -> int:
-    _run, task = resolve_task(state, args.task_id)
+    run, task = resolve_task(state, args.task_id)
+
+    sync_task_state(client, github_client, state, run, task, cwd)
     if not task.jules:
         parser.exit(
             1, f"Error: Task {args.task_id} has not been dispatched yet.\n"

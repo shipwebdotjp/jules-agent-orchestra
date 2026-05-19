@@ -271,9 +271,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "feedback":
             return handle_feedback(args, state, client, cwd, codex_bin, parser)
         elif args.command == "review":
-            return handle_review(args, state, github_client, cwd, codex_bin, parser)
+            return handle_review(args, state, client, github_client, cwd, codex_bin, parser)
         elif args.command == "send":
-            return handle_send(args, state, client, cwd, parser)
+            return handle_send(args, state, client, github_client, cwd, parser)
         elif args.command == "merge":
             return handle_merge(args, state, client, github_client, cwd, config, parser)
         elif args.command == "next":

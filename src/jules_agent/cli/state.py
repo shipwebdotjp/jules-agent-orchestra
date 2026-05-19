@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import re
 import sys
+from pathlib import Path
 
 from ..client import JulesClient
 from ..github import GitHubClient
@@ -185,3 +186,51 @@ def sync_task(client: JulesClient, task: Task) -> bool:
     except Exception as e:
         print(f"Failed to sync task {task.id}: {e}", file=sys.stderr)
         return False
+
+
+def sync_task_state(
+    client: JulesClient,
+    github_client: GitHubClient | None,
+    state: State,
+    run: Run,
+    task: Task,
+    cwd: Path,
+) -> bool:
+    """
+    Syncs the state of a single task (and its parent run) from Jules and/or GitHub.
+    Returns True if any updates occurred.
+    """
+    from ..persistence import save_state
+
+    updated = False
+    previous_run_status = run.status
+
+    if task.status == "pr_created":
+        if github_client:
+            if sync_pr_created_task(github_client, state.project.repo, task):
+                updated = True
+    elif task.status not in (
+        "completed",
+        "merged",
+        "failed",
+        "cancelled",
+        "pr_closed",
+    ):
+        if sync_task(client, task):
+            updated = True
+
+    if updated:
+        reopened_from_completed = previous_run_status == "completed"
+        run.status = get_run_sync_status(
+            run,
+            previous_status=previous_run_status,
+            reopened_from_completed=reopened_from_completed,
+        )
+        run.updated_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        save_state(cwd, state)
+
+    return updated
