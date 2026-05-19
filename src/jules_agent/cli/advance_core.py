@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import argparse
 import datetime
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
+import fcntl
+import hashlib
 import json
 import os
 import sys
@@ -43,11 +41,6 @@ class AdvanceEngine:
     def run(self) -> int:
         lock_path = self.cwd / ".jules-agent" / "advance.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if fcntl is None:
-            # Fallback for systems without fcntl (e.g. Windows)
-            # For now, we skip locking but ideally we'd use a cross-platform lock.
-            return self._execute()
 
         lock_file = open(lock_path, "a")
         try:
@@ -158,19 +151,13 @@ class AdvanceEngine:
             exit_code = 2
 
         if action_taken:
-            # Bump updated_at to ensure this task moves down in selection priority
-            target_task.updated_at = (
-                datetime.datetime.now(datetime.timezone.utc)
-                .isoformat()
-                .replace("+00:00", "Z")
-            )
-            # Sync to get latest state from server, but keep local status if it was changed to blocked
-            local_status = target_task.status
-            sync_success = sync_task(self.client, target_task)
-            if local_status == "blocked":
-                target_task.status = "blocked"
-
-            if sync_success:
+            # Sync to get latest state from server before saving
+            if sync_task(self.client, target_task):
+                target_task.updated_at = (
+                    datetime.datetime.now(datetime.timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                )
                 save_state(self.cwd, self.state)
 
         if self.output_json:
