@@ -1011,6 +1011,7 @@ def update_sticky_comment(
         task.review.sticky_comment_url = comment.get("html_url")
     except Exception as e:
         print(f"Warning: Failed to post sticky comment: {e}")
+        raise
 
 
 def apply_review_result(
@@ -1048,6 +1049,7 @@ def apply_review_result(
             github_client.post_issue_comment(repo, issue_number, fix_msg)
         except Exception as e:
             print(f"Warning: Failed to post fix request comment: {e}")
+            raise
     else:
         task.status = "waiting_human_review"
 
@@ -1102,6 +1104,7 @@ def perform_task_review(
     )
 
     print(f"Calling Codex for review of task {task.id}...")
+    prev_status = task.status
     task.status = "codex_reviewing"
     save_state(cwd, state)
 
@@ -1109,7 +1112,7 @@ def perform_task_review(
         result = run_codex_review(prompt, cwd=cwd, codex_bin=codex_bin)
     except Exception as e:
         # Revert status on failure
-        task.status = "pr_created"
+        task.status = prev_status
         save_state(cwd, state)
         raise PipelineError(f"Codex review failed: {e}")
 
