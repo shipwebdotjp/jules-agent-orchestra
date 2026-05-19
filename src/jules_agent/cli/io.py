@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import re
 
+import sys
+from typing import TYPE_CHECKING
+
 from ..models import ExecutionPlan
 from ..pipeline import format_subtask_for_jules
 from ..codex import ClarificationQuestion, PipelineError
+
+if TYPE_CHECKING:
+    from ..models import Run, Task
 
 
 def build_review_prompt(task: str, feedback_history: list[str]) -> str:
@@ -77,6 +83,43 @@ def render_clarification_question(
     for option_index, option in enumerate(question.options, start=1):
         output(f"  {option_index}. {option}")
     output("Enter a number, or type a custom answer.")
+
+
+def select_task_interactively(
+    candidates: list[tuple[Run, Task]],
+    command: str,
+    *,
+    input_func=input,
+    output=print,
+) -> tuple[Run, Task]:
+    if not sys.stdin.isatty():
+        raise PipelineError(
+            "Error: task_id is required when stdin is not interactive. Please pass TASK_ID explicitly."
+        )
+
+    if not candidates:
+        raise PipelineError(f"No eligible tasks for {command}.")
+
+    output(f"Select a task for {command}:")
+    for i, (run, task) in enumerate(candidates, start=1):
+        output(f"  {i}. {run.id}:{task.id} [{task.status}] {task.title}")
+
+    while True:
+        try:
+            choice = input_func(f"Select task (1-{len(candidates)}): ").strip()
+        except EOFError as exc:
+            raise PipelineError("Selection cancelled.") from exc
+
+        if not choice:
+            continue
+
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(candidates):
+                return candidates[idx - 1]
+            output(f"Invalid selection. Please enter a number between 1 and {len(candidates)}.")
+        except ValueError:
+            output("Invalid input. Please enter a number.")
 
 
 def prompt_for_clarification_answer(

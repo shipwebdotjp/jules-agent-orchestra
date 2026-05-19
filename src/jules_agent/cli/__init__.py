@@ -19,9 +19,15 @@ from .commands import (
     run_confirmation_loop,
     run_feedback_loop,
 )
-from .io import build_review_prompt, prompt_for_review, render_plan
+from .io import (
+    build_review_prompt,
+    prompt_for_review,
+    render_plan,
+    select_task_interactively,
+)
 from .state import (
     extract_pull_request_number,
+    get_candidates,
     get_jules_state_mapping,
     get_run_sync_status,
     resolve_task,
@@ -49,11 +55,13 @@ __all__ = [
     "get_jules_state_mapping",
     "get_run_sync_status",
     "prompt_for_review",
+    "get_candidates",
     "render_plan",
     "resolve_task",
     "run_clarification_loop",
     "run_confirmation_loop",
     "run_feedback_loop",
+    "select_task_interactively",
     "sync_pr_created_task",
     "sync_task",
     "suggest_reply",
@@ -104,22 +112,33 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("sync", help="Sync with Jules API")
 
     approve_parser = subparsers.add_parser("approve", help="Approve a task plan")
-    approve_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
+    approve_parser.add_argument(
+        "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
+    )
 
     send_parser = subparsers.add_parser("send", help="Send a message to a task")
-    send_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
-    send_parser.add_argument("message", help="Message to send")
+    send_parser.add_argument(
+        "args",
+        nargs="+",
+        help="[TASK_ID] MESSAGE (if TASK_ID is omitted, message must be quoted if it contains spaces)",
+    )
 
     feedback_parser = subparsers.add_parser(
         "feedback", help="Interactive feedback loop for a task"
     )
-    feedback_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
+    feedback_parser.add_argument(
+        "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
+    )
 
     review_parser = subparsers.add_parser("review", help="Manually run Codex review for a task")
-    review_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
+    review_parser.add_argument(
+        "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
+    )
 
     merge_parser = subparsers.add_parser("merge", help="Merge pull request for a task")
-    merge_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
+    merge_parser.add_argument(
+        "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
+    )
     merge_group = merge_parser.add_mutually_exclusive_group()
     merge_group.add_argument(
         "--merge",

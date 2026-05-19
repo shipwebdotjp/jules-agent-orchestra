@@ -7,7 +7,8 @@ from ...client import JulesClient
 from ...github import GitHubClient
 from ...models import State
 from ...pipeline import perform_task_review
-from ..state import resolve_task, sync_task_state
+from ..io import select_task_interactively
+from ..state import get_candidates, resolve_task, sync_task_state
 
 
 def handle_review(
@@ -22,7 +23,11 @@ def handle_review(
     if not github_client:
         parser.exit(1, "Error: GITHUB_TOKEN is required for review.\n")
 
-    run, task = resolve_task(state, args.task_id)
+    if args.task_id:
+        run, task = resolve_task(state, args.task_id)
+    else:
+        candidates = get_candidates(state, "review")
+        run, task = select_task_interactively(candidates, "review")
 
     sync_task_state(client, github_client, state, run, task, cwd)
 

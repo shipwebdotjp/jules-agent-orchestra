@@ -14,7 +14,8 @@ from ...pipeline import (
 from ...codex import PipelineError
 from ...git import CommandRunner, run_command
 from ...persistence import save_state
-from ..state import resolve_task, sync_task
+from ..io import select_task_interactively
+from ..state import get_candidates, resolve_task, sync_task
 
 FeedbackOutcome = Literal["completed", "skipped", "failed"]
 
@@ -199,10 +200,17 @@ def handle_feedback(
     codex_bin: str,
     parser: argparse.ArgumentParser,
 ) -> int:
-    _run, task = resolve_task(state, args.task_id)
+    if args.task_id:
+        _run, task = resolve_task(state, args.task_id)
+        task_id_for_print = args.task_id
+    else:
+        candidates = get_candidates(state, "feedback")
+        _run, task = select_task_interactively(candidates, "feedback")
+        task_id_for_print = f"{_run.id}:{task.id}"
+
     if not task.jules:
         parser.exit(
-            1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
+            1, f"Error: Task {task_id_for_print} has not been dispatched yet.\n"
         )
 
     outcome = run_feedback_loop(

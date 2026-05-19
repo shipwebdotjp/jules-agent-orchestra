@@ -188,6 +188,40 @@ def sync_task(client: JulesClient, task: Task) -> bool:
         return False
 
 
+def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
+    candidates: list[tuple[Run, Task]] = []
+    for run in state.runs:
+        for task in run.tasks:
+            eligible = False
+            if command == "approve":
+                eligible = task.jules is not None and task.status == "awaiting_plan_approval"
+            elif command == "feedback":
+                eligible = task.jules is not None and task.status in (
+                    "awaiting_plan_approval",
+                    "awaiting_user_feedback",
+                )
+            elif command == "send":
+                eligible = task.jules is not None and task.status not in (
+                    "completed",
+                    "merged",
+                    "pr_closed",
+                    "failed",
+                    "cancelled",
+                )
+            elif command in ("review", "merge"):
+                eligible = task.pull_request is not None and task.status in (
+                    "pr_created",
+                    "waiting_human_review",
+                )
+
+            if eligible:
+                candidates.append((run, task))
+
+    # Sort by updated_at descending
+    candidates.sort(key=lambda x: x[1].updated_at, reverse=True)
+    return candidates
+
+
 def sync_task_state(
     client: JulesClient,
     github_client: GitHubClient | None,

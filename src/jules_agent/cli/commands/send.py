@@ -8,7 +8,8 @@ from ...client import JulesClient
 from ...github import GitHubClient
 from ...models import State
 from ...persistence import save_state
-from ..state import resolve_task, sync_task_state
+from ..io import select_task_interactively
+from ..state import get_candidates, resolve_task, sync_task_state
 
 
 def handle_send(
@@ -19,16 +20,26 @@ def handle_send(
     cwd: Path,
     parser: argparse.ArgumentParser,
 ) -> int:
-    run, task = resolve_task(state, args.task_id)
+    # args.args is a list due to nargs="+"
+    if len(args.args) >= 2:
+        task_id = args.args[0]
+        message = " ".join(args.args[1:])
+        run, task = resolve_task(state, task_id)
+        task_id_for_print = task_id
+    else:
+        message = args.args[0]
+        candidates = get_candidates(state, "send")
+        run, task = select_task_interactively(candidates, "send")
+        task_id_for_print = f"{run.id}:{task.id}"
 
     sync_task_state(client, github_client, state, run, task, cwd)
     if not task.jules:
         parser.exit(
-            1, f"Error: Task {args.task_id} has not been dispatched yet.\n"
+            1, f"Error: Task {task_id_for_print} has not been dispatched yet.\n"
         )
 
-    print(f"Sending message to task {args.task_id}...")
-    client.send_message(task.jules.session_name, args.message)
+    print(f"Sending message to task {task_id_for_print}...")
+    client.send_message(task.jules.session_name, message)
     task.updated_at = (
         datetime.datetime.now(datetime.timezone.utc)
         .isoformat()
