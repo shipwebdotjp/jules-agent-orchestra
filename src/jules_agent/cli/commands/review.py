@@ -6,7 +6,7 @@ from pathlib import Path
 from ...github import GitHubClient
 from ...models import State
 from ...pipeline import perform_task_review
-from ..state import resolve_task
+from ..state import resolve_task, sync_task
 
 
 def handle_review(
@@ -21,6 +21,7 @@ def handle_review(
         parser.exit(1, "Error: GITHUB_TOKEN is required for review.\n")
 
     _, task = resolve_task(state, args.task_id)
+
 
     perform_task_review(
         task=task,

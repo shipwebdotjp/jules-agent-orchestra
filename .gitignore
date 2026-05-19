@@ -13,3 +13,4 @@ dist/
 coverage.xml
 .jules-agent/
 .aider*
+document/archive/
