@@ -47,6 +47,17 @@ class GitHubClient:
             )
         return response.json()
 
+    def update_issue_comment(self, repo: str, comment_id: int, body: str) -> dict[str, Any]:
+        path = f"/repos/{repo}/issues/comments/{comment_id}"
+        response = self._request("PATCH", path, json={"body": body})
+        if response.status_code != 200:
+            raise GitHubAPIError(
+                f"Failed to update comment: {response.text}",
+                status_code=response.status_code,
+                response_body=response.text,
+            )
+        return response.json()
+
     def get_pull_request(self, repo: str, pull_number: int) -> dict[str, Any]:
         path = f"/repos/{repo}/pulls/{pull_number}"
         response = self._request("GET", path)
@@ -70,6 +81,17 @@ class GitHubClient:
             status_code=response.status_code,
             response_body=response.text,
         )
+
+    def compare_commits(self, repo: str, base: str, head: str) -> dict[str, Any]:
+        path = f"/repos/{repo}/compare/{base}...{head}"
+        response = self._request("GET", path)
+        if response.status_code != 200:
+            raise GitHubAPIError(
+                f"Failed to compare commits: {response.text}",
+                status_code=response.status_code,
+                response_body=response.text,
+            )
+        return response.json()
 
     def merge_pull_request(
         self,
