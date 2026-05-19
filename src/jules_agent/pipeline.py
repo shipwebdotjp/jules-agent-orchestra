@@ -575,12 +575,12 @@ def codex_review_schema() -> dict[str, object]:
                         "line": {"type": "integer"},
                         "message": {"type": "string"},
                     },
-                    "required": ["file", "message"],
+                    "required": ["file", "line","message"],
                 },
             },
             "next_steps": {"type": "string"},
         },
-        "required": ["status", "summary", "next_steps"],
+        "required": ["status", "summary", "findings", "next_steps"],
     }
 
 def run_codex_review(
@@ -1131,11 +1131,28 @@ def perform_task_review(
         raise PipelineError("Generated diff is empty. Nothing to review.")
 
     prompt = (
-        f"Review the following code changes for task: {task.title}\n\n"
-        f"Task Description: {task.description}\n\n"
-        "Return a JSON object with 'status' (pass/changes_requested), 'summary', "
-        "'findings' (list of {file, line, message}), and 'next_steps'.\n\n"
-        f"Diff:\n{diff}"
+        f"You are performing a first-pass code review for the following task.\n\n"
+        f"## Task\n"
+        f"**Title:** {task.title}\n"
+        f"**Description:** {task.description}\n\n"
+        f"## Diff\n"
+        f"```diff\n{diff}\n```\n\n"
+        f"## Review Criteria\n"
+        f"Before raising a finding, confirm that ALL of the following conditions are met:\n"
+        f"1. It clearly violates the task description or acceptance criteria, "
+        f"OR the diff demonstrably breaks existing functionality, "
+        f"OR it will highly likely cause an exception, incorrect behavior, or data corruption during normal execution.\n"
+        f"2. The fix is entirely within the scope of this PR (no external changes required).\n"
+        f"3. The implementer can fix it without additional design decisions.\n\n"
+        f"Do NOT report findings for: style preferences, naming conventions, "
+        f"speculative edge cases, architectural suggestions, or anything requiring "
+        f"changes outside this PR.\n\n"
+        f"## Output Format\n"
+        f"Return a JSON object with:\n"
+        f"- `status`: 'pass' if no findings, 'changes_requested' if there are findings\n"
+        f"- `summary`: brief overall assessment\n"
+        f"- `findings`: list of {{file, line, message}} — only include if criteria above are met\n"
+        f"- `next_steps`: concrete next action for the implementer\n"
     )
 
     print(f"Calling Codex for review of task {task.id}...")
