@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 from pathlib import Path
 from typing import Literal
 
@@ -66,20 +67,42 @@ def run_feedback_loop(
         explanation = result["explanation"]
         approval_recommended = result.get("approval_recommended", False)
 
-        # Handle auto-action on the first iteration (or every iteration if we want,
-        # but usually auto mode doesn't involve feedback loop)
+        # Idempotency check using advance_state
+        latest_activity = activities[-1] if activities else {}
+        activity_id = latest_activity.get("name") or latest_activity.get("id")
+        suggestion_hash = hashlib.sha256(suggestion.encode("utf-8")).hexdigest()
+
         if first_iteration:
+            last_activity_id = task.advance_state.get("last_activity_id")
+            last_feedback_hash = task.advance_state.get("last_feedback_hash")
+            last_advance_action = task.advance_state.get("last_advance_action")
+
             if is_awaiting_plan_approval and auto_plan_approval:
                 if approval_recommended:
+                    if last_activity_id == activity_id and last_advance_action == "approve_plan":
+                        output("Plan already approved for this activity. Skipping.")
+                        return "completed"
+
                     output("Auto-approving plan as recommended by Codex...")
                     client.approve_plan(task.jules.session_name)
                     task.status = "plan_approved"
+                    task.advance_state["last_activity_id"] = activity_id
+                    task.advance_state["last_advance_action"] = "approve_plan"
+                    task.advance_state["last_advanced_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     return "completed"
                 else:
                     output("Codex does not recommend auto-approval. Falling back to interactive mode.")
             elif not is_awaiting_plan_approval and auto_feedback:
+                if last_activity_id == activity_id and last_feedback_hash == suggestion_hash:
+                    output("Feedback already sent for this activity. Skipping.")
+                    return "completed"
+
                 output(f"Sending auto-reply:\n{suggestion}")
                 client.send_message(task.jules.session_name, suggestion)
+                task.advance_state["last_activity_id"] = activity_id
+                task.advance_state["last_feedback_hash"] = suggestion_hash
+                task.advance_state["last_advance_action"] = "send_message"
+                task.advance_state["last_advanced_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 return "completed"
 
             first_iteration = False
