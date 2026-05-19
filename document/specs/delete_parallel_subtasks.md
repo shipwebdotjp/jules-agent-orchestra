@@ -8,7 +8,7 @@
 - `pipeline.py` の strategy 定義・Codex プロンプト・検証を更新し、`parallel_subtasks` を選択肢から削除する。
 - `validate_plan()` を実装して、誤って `parallel_subtasks` が返ってきた場合はハードエラーにする。
 - `run` 側は、`sequential_subtasks` の複数タスクを「先頭だけ dispatch」する既存の直列フローに統一し、残りは `next` に渡す。
-- `dispatch_subtasks` から `sequential_subtasks` 拒否を हटしつつ、strategy に応じた直列 dispatch を明示する。
+- `dispatch_subtasks` から `sequential_subtasks` 拒否を削除しつつ、strategy に応じた直列 dispatch を明示する。
 - `ExecutionStrategy` から `parallel_subtasks` を削除し、CLI/help/README/テストも新しい contract に揃える。
 - 既存の `parallel_subtasks` を含む state は互換対象にせず、古い値が見つかったら早めに失敗する前提で整理する。
 

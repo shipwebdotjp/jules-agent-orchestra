@@ -86,7 +86,7 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse(schema["additionalProperties"])
         self.assertEqual(
             set(schema["properties"]["strategy"]["enum"]),
-            {"single_session", "parallel_subtasks", "sequential_subtasks"},
+            {"single_session", "sequential_subtasks"},
         )
         self.assertEqual(
             schema["properties"]["tasks"]["items"]["required"],
@@ -158,7 +158,7 @@ class PipelineTests(unittest.TestCase):
                         args[args.index("--output-last-message") + 1]
                     )
                     last_message_path.write_text(
-                        '{"strategy":"parallel_subtasks","tasks":[{"title":"Plan"},{"title":"Implement"}]}',
+                        '{"strategy":"sequential_subtasks","tasks":[{"title":"Plan"},{"title":"Implement"}]}',
                         encoding="utf-8",
                     )
                 return responses.pop(0)
@@ -169,7 +169,7 @@ class PipelineTests(unittest.TestCase):
                 runner=runner,
             )
 
-        self.assertEqual(plan.strategy, "parallel_subtasks")
+        self.assertEqual(plan.strategy, "sequential_subtasks")
         self.assertEqual([task.title for task in plan.tasks], ["Plan", "Implement"])
 
     def test_dispatch_subtasks_invokes_api(self) -> None:
@@ -200,13 +200,12 @@ class PipelineTests(unittest.TestCase):
                 subtasks,
                 cwd=cwd,
                 client=client,
-                strategy="parallel_subtasks",
+                strategy="sequential_subtasks",
             )
 
-            self.assertEqual(len(results), 2)
+            self.assertEqual(len(results), 1)
             self.assertEqual(results[0].session_id, "s1")
-            self.assertEqual(results[1].session_id, "s2")
-            self.assertEqual(client.create_session.call_count, 2)
+            self.assertEqual(client.create_session.call_count, 1)
             self.assertTrue(
                 client.create_session.call_args_list[0].kwargs["require_plan_approval"]
             )
@@ -258,6 +257,15 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(outcome.plan.strategy, "single_session")
         self.assertEqual([task.title for task in outcome.subtasks], ["One"])
         self.assertEqual(outcome.dispatches[0].session_id, "s1")
+
+    def test_validate_plan_rejects_parallel_subtasks(self) -> None:
+        from jules_agent.models import ExecutionPlan
+        from jules_agent.pipeline import validate_plan
+
+        plan = ExecutionPlan(strategy="parallel_subtasks", tasks=[Subtask(title="One")])  # type: ignore
+        with self.assertRaises(PipelineError) as cm:
+            validate_plan(plan)
+        self.assertIn("parallel_subtasks", str(cm.exception))
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
-ExecutionStrategy = Literal["single_session", "parallel_subtasks", "sequential_subtasks"]
+ExecutionStrategy = Literal["single_session", "sequential_subtasks"]
 
 RunStatus = Literal["planned", "running", "completed", "failed", "cancelled"]
 

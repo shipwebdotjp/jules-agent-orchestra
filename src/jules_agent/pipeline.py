@@ -45,7 +45,6 @@ from .review import (
 
 SUPPORTED_STRATEGIES = {
     "single_session",
-    "parallel_subtasks",
     "sequential_subtasks",
 }
 
@@ -55,10 +54,8 @@ def build_codex_prompt(task: str) -> str:
         "Analyze the task and return a JSON object matching the supplied schema.\n"
         "Choose exactly one strategy:\n"
         "  - single_session: one cohesive Jules session; use this for a small change that should be handled together\n"
-        "  - parallel_subtasks: multiple independent tasks that can be dispatched concurrently\n"
-        "  - sequential_subtasks: tasks that depend on each other; this mode is currently rejected by the CLI\n"
+        "  - sequential_subtasks: tasks that depend on each other; multiple tasks will be executed one by one\n"
         "For single_session, return exactly one task.\n"
-        "For parallel_subtasks, return only tasks that do not overlap in responsibility.\n"
         "Return only JSON.\n\n"
         f"Task:\n{task.strip()}"
     )
@@ -272,7 +269,8 @@ def _normalize_tasks(raw_items: object) -> list[Subtask]:
 
 
 def validate_plan(plan: ExecutionPlan) -> None:
-    pass
+    if plan.strategy == "parallel_subtasks":
+        raise PipelineError("Strategy 'parallel_subtasks' is no longer supported. Please use 'sequential_subtasks' or 'single_session'.")
 
 
 def _first_non_empty_text(*values: object) -> str | None:
@@ -579,13 +577,9 @@ def dispatch_subtasks(
     cwd: Path,
     client: JulesClient,
     repo: str | None = None,
-    strategy: str = "parallel_subtasks",
+    strategy: str = "sequential_subtasks",
     require_plan_approval: bool = True,
 ) -> list[DispatchResult]:
-    if strategy == "sequential_subtasks":
-        raise PipelineError(
-            "Codex selected sequential_subtasks, which this CLI does not support yet."
-        )
     if strategy == "single_session" and len(subtasks) != 1:
         raise PipelineError("single_session plans must contain exactly one task.")
 
@@ -602,8 +596,12 @@ def dispatch_subtasks(
     source_name = find_source_name(client, repo)
     starting_branch = get_git_branch(cwd)
 
+    tasks_to_dispatch = subtasks
+    if strategy == "sequential_subtasks":
+        tasks_to_dispatch = subtasks[:1]
+
     results: list[DispatchResult] = []
-    for index, subtask in enumerate(subtasks, start=1):
+    for index, subtask in enumerate(tasks_to_dispatch, start=1):
         prompt = format_subtask_for_jules(subtask)
         try:
             session = client.create_session(
