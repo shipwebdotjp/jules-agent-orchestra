@@ -8,7 +8,7 @@ from pathlib import Path
 from ...client import JulesClient
 from ...github import GitHubClient
 from ...models import State
-from ...pipeline import save_state
+from ...persistence import save_state
 from ..state import (
     get_run_sync_status,
     sync_pr_created_task,

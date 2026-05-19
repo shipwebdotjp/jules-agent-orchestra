@@ -8,12 +8,11 @@ from typing import Literal
 from ...client import JulesClient
 from ...models import State, Task
 from ...pipeline import (
-    CommandRunner,
-    PipelineError,
-    run_command,
-    save_state,
     suggest_reply,
 )
+from ...codex import PipelineError
+from ...git import CommandRunner, run_command
+from ...persistence import save_state
 from ..state import resolve_task, sync_task
 
 FeedbackOutcome = Literal["completed", "skipped", "failed"]

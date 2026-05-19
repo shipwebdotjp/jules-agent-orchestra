@@ -7,7 +7,7 @@ import sys
 from ..client import JulesClient
 from ..github import GitHubClient
 from ..models import PullRequestInfo, Run, RunStatus, State, Task, TaskStatus, gitPatchInfo
-from ..pipeline import PipelineError
+from ..codex import PipelineError
 
 
 def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
