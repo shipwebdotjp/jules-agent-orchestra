@@ -21,6 +21,8 @@ TaskStatus = Literal[
     "completed",
     "pr_created",
     "reviewing",
+    "codex_reviewing",
+    "jules_fixing",
     "needs_fix",
     "waiting_human_review",
     "merged",
@@ -103,6 +105,56 @@ class JulesSessionInfo:
 
 
 @dataclass
+class TaskReviewAttempt:
+    head_sha: str
+    created_at: str
+    status: Literal["pass", "changes_requested"]
+    summary: str
+    next_steps: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "head_sha": self.head_sha,
+            "created_at": self.created_at,
+            "status": self.status,
+            "summary": self.summary,
+            "next_steps": self.next_steps,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TaskReviewAttempt:
+        return cls(
+            head_sha=data["head_sha"],
+            created_at=data["created_at"],
+            status=data["status"],
+            summary=data["summary"],
+            next_steps=data["next_steps"],
+        )
+
+
+@dataclass
+class TaskReview:
+    sticky_comment_id: int | None = None
+    sticky_comment_url: str | None = None
+    attempts: list[TaskReviewAttempt] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sticky_comment_id": self.sticky_comment_id,
+            "sticky_comment_url": self.sticky_comment_url,
+            "attempts": [a.to_dict() for a in self.attempts],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TaskReview:
+        return cls(
+            sticky_comment_id=data.get("sticky_comment_id"),
+            sticky_comment_url=data.get("sticky_comment_url"),
+            attempts=[TaskReviewAttempt.from_dict(a) for a in data.get("attempts", [])],
+        )
+
+
+@dataclass
 class PullRequestInfo:
     url: str
     title: str | None = None
@@ -138,6 +190,7 @@ class Task:
     out_of_scope: list[str] = field(default_factory=list)
     jules: JulesSessionInfo | None = None
     pull_request: PullRequestInfo | None = None
+    review: TaskReview | None = None
     attempts: int = 0
     max_attempts: int = 3
 
@@ -153,6 +206,7 @@ class Task:
             "out_of_scope": self.out_of_scope,
             "jules": self.jules.to_dict() if self.jules else None,
             "pull_request": self.pull_request.to_dict() if self.pull_request else None,
+            "review": self.review.to_dict() if self.review else None,
             "attempts": self.attempts,
             "max_attempts": self.max_attempts,
             "created_at": self.created_at,
@@ -163,17 +217,24 @@ class Task:
     def from_dict(cls, data: dict[str, Any]) -> Task:
         jules_data = data.get("jules")
         pr_data = data.get("pull_request")
+        review_data = data.get("review")
+
+        status = data["status"]
+        if status == "reviewing":
+            status = "codex_reviewing"
+
         return cls(
             id=data["id"],
             title=data["title"],
             description=data.get("description"),
             prompt=data.get("prompt"),
-            status=data["status"],  # type: ignore
+            status=status,  # type: ignore
             depends_on=data.get("depends_on", []),
             acceptance_criteria=data.get("acceptance_criteria", []),
             out_of_scope=data.get("out_of_scope", []),
             jules=JulesSessionInfo.from_dict(jules_data) if jules_data else None,
             pull_request=PullRequestInfo.from_dict(pr_data) if pr_data else None,
+            review=TaskReview.from_dict(review_data) if review_data else None,
             attempts=data.get("attempts", 0),
             max_attempts=data.get("max_attempts", 3),
             created_at=data["created_at"],

@@ -47,6 +47,7 @@ jules-agent [flags] <command> [args]
 - `approve <task_id>`: Manually approve the proposed plan for a specific task.
 - `send <task_id> <message>`: Send a manual message to a task's Jules session.
 - `feedback <task_id>`: Enter an interactive feedback loop with Codex to refine a task's plan or reply.
+- `review <task_id>`: Manually run Codex review for a task with an open pull request.
 - `merge <task_id>`: Manually merge the pull request associated with a task.
 - `next`: Dispatch the next task in a sequential run.
 

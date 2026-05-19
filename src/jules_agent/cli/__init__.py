@@ -10,6 +10,7 @@ from .commands import (
     handle_feedback,
     handle_merge,
     handle_next,
+    handle_review,
     handle_run,
     handle_send,
     handle_status,
@@ -115,6 +116,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     feedback_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
 
+    review_parser = subparsers.add_parser("review", help="Manually run Codex review for a task")
+    review_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
+
     merge_parser = subparsers.add_parser("merge", help="Merge pull request for a task")
     merge_parser.add_argument("task_id", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
     merge_group = merge_parser.add_mutually_exclusive_group()
@@ -219,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_approve(args, state, client, cwd, parser)
         elif args.command == "feedback":
             return handle_feedback(args, state, client, cwd, codex_bin, parser)
+        elif args.command == "review":
+            return handle_review(args, state, github_client, cwd, codex_bin, parser)
         elif args.command == "send":
             return handle_send(args, state, client, cwd, parser)
         elif args.command == "merge":
