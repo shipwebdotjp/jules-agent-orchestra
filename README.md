@@ -132,7 +132,7 @@ The Codex step expects JSON shaped like this:
 }
 ```
 
-`strategy` can be `single_session`, `parallel_subtasks`, or `sequential_subtasks`. Each task can also be a plain string. The dispatcher turns the title and any available details into the prompt passed to `jules new`.
+`strategy` can be `single_session` or `sequential_subtasks`. Each task can also be a plain string. The dispatcher turns the title and any available details into the prompt passed to `jules new`.
 
 ## Development
 

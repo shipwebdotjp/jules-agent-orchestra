@@ -173,7 +173,7 @@ def handle_run(
     print(f"Plan saved. Run ID: {run_id}")
 
     tasks_to_dispatch = []
-    if plan.strategy in ("single_session", "parallel_subtasks"):
+    if plan.strategy == "single_session":
         tasks_to_dispatch = run.tasks
     elif plan.strategy == "sequential_subtasks":
         tasks_to_dispatch = [run.tasks[0]]
