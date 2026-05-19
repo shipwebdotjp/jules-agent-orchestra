@@ -151,17 +151,62 @@ def build_parser() -> argparse.ArgumentParser:
     advance_parser.add_argument(
         "--auto-plan-approval",
         action="store_true",
+        default=None,
         help="Automatically approve plans when recommended.",
     )
     advance_parser.add_argument(
         "--auto-feedback",
         action="store_true",
+        default=None,
         help="Automatically send suggested feedback.",
+    )
+    advance_parser.add_argument(
+        "--auto-merge",
+        action="store_true",
+        default=None,
+        help="Automatically merge PRs.",
     )
     advance_parser.add_argument(
         "--auto",
         action="store_true",
         help="Enable all automatic behaviors (plan approval and feedback).",
+    )
+    advance_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit result as JSON.",
+    )
+
+    cron_parser = subparsers.add_parser(
+        "cron", help="Non-interactive background execution"
+    )
+    cron_parser.add_argument(
+        "--auto-plan-approval",
+        action="store_true",
+        default=None,
+        help="Automatically approve plans when recommended.",
+    )
+    cron_parser.add_argument(
+        "--auto-feedback",
+        action="store_true",
+        default=None,
+        help="Automatically send suggested feedback.",
+    )
+    cron_parser.add_argument(
+        "--auto-merge",
+        action="store_true",
+        default=None,
+        help="Automatically merge PRs.",
+    )
+    cron_parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="Enable all automatic behaviors (plan approval and feedback).",
+    )
+    cron_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit result as JSON.",
     )
 
     return parser
@@ -214,6 +259,9 @@ def main(argv: list[str] | None = None) -> int:
             return handle_run(args, state, client, cwd, config)
         elif args.command == "advance":
             return handle_advance(args, state, client, github_client, cwd, config)
+        elif args.command == "cron":
+            from .commands.advance import handle_cron
+            return handle_cron(args, state, client, github_client, cwd, config)
         elif args.command == "status":
             return handle_status(args, state)
         elif args.command == "sync":

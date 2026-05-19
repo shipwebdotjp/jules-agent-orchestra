@@ -29,6 +29,7 @@ def run_feedback_loop(
     auto_plan_approval: bool = False,
     auto_feedback: bool = False,
     allow_skip: bool = False,
+    interactive: bool = True,
 ) -> FeedbackOutcome:
     if not task.jules:
         raise PipelineError("Task has no Jules session info.")
@@ -82,6 +83,10 @@ def run_feedback_loop(
                 return "completed"
 
             first_iteration = False
+
+        if not interactive:
+            output("Non-interactive mode: human judgment needed.")
+            return "skipped"
 
         output("-" * 40)
         output(f"Explanation: {explanation}")
