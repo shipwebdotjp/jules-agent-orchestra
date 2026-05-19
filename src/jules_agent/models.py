@@ -25,6 +25,7 @@ TaskStatus = Literal[
     "jules_fixing",
     "needs_fix",
     "waiting_human_review",
+    "blocked",
     "merged",
     "pr_closed",
     "failed",
@@ -193,6 +194,7 @@ class Task:
     review: TaskReview | None = None
     attempts: int = 0
     max_attempts: int = 3
+    advance_state: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -211,6 +213,7 @@ class Task:
             "max_attempts": self.max_attempts,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "advance_state": self.advance_state,
         }
 
     @classmethod
@@ -239,6 +242,7 @@ class Task:
             max_attempts=data.get("max_attempts", 3),
             created_at=data["created_at"],
             updated_at=data["updated_at"],
+            advance_state=data.get("advance_state", {}),
         )
 
 

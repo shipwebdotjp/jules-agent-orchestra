@@ -28,7 +28,7 @@ class TestAdvance(unittest.TestCase):
         self.assertTrue(args.auto_feedback)
 
     @patch("jules_agent.cli.commands.advance.handle_sync")
-    @patch("jules_agent.cli.commands.advance.save_state")
+    @patch("jules_agent.cli.advance_core.save_state")
     def test_handle_advance_no_tasks(self, mock_save, mock_sync):
         mock_sync.return_value = 0
         state = State(project=ProjectState(root="/tmp", repo="owner/repo"), runs=[])
@@ -46,8 +46,8 @@ class TestAdvance(unittest.TestCase):
         mock_sync.assert_called_once()
 
     @patch("jules_agent.cli.commands.advance.handle_sync")
-    @patch("jules_agent.cli.commands.advance.sync_task")
-    @patch("jules_agent.cli.commands.advance.run_feedback_loop")
+    @patch("jules_agent.cli.advance_core.sync_task")
+    @patch("jules_agent.cli.commands.feedback.run_feedback_loop")
     def test_handle_advance_picks_latest_task(
         self, mock_feedback_loop, mock_sync_task, mock_sync
     ):
@@ -98,9 +98,9 @@ class TestAdvance(unittest.TestCase):
         self.assertEqual(called_task.id, "2")
 
     @patch("jules_agent.cli.commands.advance.handle_sync")
-    @patch("jules_agent.cli.commands.advance.sync_task")
-    @patch("jules_agent.cli.commands.advance.run_feedback_loop")
-    @patch("jules_agent.cli.commands.advance.save_state")
+    @patch("jules_agent.cli.advance_core.sync_task")
+    @patch("jules_agent.cli.commands.feedback.run_feedback_loop")
+    @patch("jules_agent.cli.advance_core.save_state")
     def test_handle_advance_stops_after_one_step(
         self, mock_save, mock_feedback_loop, mock_sync_task, mock_sync
     ):
@@ -144,9 +144,9 @@ class TestAdvance(unittest.TestCase):
         mock_save.assert_called_once()
 
     @patch("jules_agent.cli.commands.advance.handle_sync")
-    @patch("jules_agent.cli.commands.advance.sync_task")
-    @patch("jules_agent.cli.commands.advance.run_feedback_loop")
-    @patch("jules_agent.cli.commands.advance.save_state")
+    @patch("jules_agent.cli.advance_core.sync_task")
+    @patch("jules_agent.cli.commands.feedback.run_feedback_loop")
+    @patch("jules_agent.cli.advance_core.save_state")
     def test_handle_advance_no_save_on_sync_failure(
         self, mock_save, mock_feedback_loop, mock_sync_task, mock_sync
     ):
