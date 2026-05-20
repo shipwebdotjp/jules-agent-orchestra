@@ -12,6 +12,7 @@ from .codex import (
     ClarificationPrompt,
     ClarificationQuestion,
     PipelineError,
+    call_backend,
     call_codex,
     parse_json_document,
 )
@@ -315,15 +316,17 @@ def identify_clarifications(
     clarification_history: list[ClarificationExchange],
     *,
     cwd: Path,
-    codex_bin: str = "codex",
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
     runner: CommandRunner = run_command,
 ) -> ClarificationPrompt:
     prompt = build_clarification_prompt(task, clarification_history)
-    payload = call_codex(
+    payload = call_backend(
         prompt,
         clarification_schema(),
         cwd=cwd,
-        codex_bin=codex_bin,
+        tool_name=tool_name,
+        tool_bin=tool_bin,
         runner=runner,
     )
     return normalize_clarification(payload)
@@ -354,15 +357,17 @@ def decompose_task(
     task: str,
     *,
     cwd: Path,
-    codex_bin: str = "codex",
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
     runner: CommandRunner = run_command,
 ) -> ExecutionPlan:
     prompt = build_codex_prompt(task)
-    payload = call_codex(
+    payload = call_backend(
         prompt,
         codex_schema(),
         cwd=cwd,
-        codex_bin=codex_bin,
+        tool_name=tool_name,
+        tool_bin=tool_bin,
         runner=runner,
     )
     return normalize_plan(payload)
@@ -469,7 +474,8 @@ def suggest_reply(
     *,
     cwd: Path,
     is_awaiting_plan_approval: bool = False,
-    codex_bin: str = "codex",
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
     runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
     activities_formatted = format_activities(activities)
@@ -479,11 +485,12 @@ def suggest_reply(
         feedback_history,
         is_awaiting_plan_approval=is_awaiting_plan_approval,
     )
-    payload = call_codex(
+    payload = call_backend(
         prompt,
         suggestion_schema(),
         cwd=cwd,
-        codex_bin=codex_bin,
+        tool_name=tool_name,
+        tool_bin=tool_bin,
         runner=runner,
     )
 
@@ -652,13 +659,15 @@ def run_pipeline(
     cwd: Path,
     client: JulesClient,
     repo: str | None = None,
-    codex_bin: str = "codex",
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
     runner: CommandRunner = run_command,
 ) -> PipelineOutcome:
     plan = decompose_task(
         task,
         cwd=cwd,
-        codex_bin=codex_bin,
+        tool_name=tool_name,
+        tool_bin=tool_bin,
         runner=runner,
     )
     validate_plan(plan)
@@ -677,7 +686,8 @@ def perform_task_review(
     state: State,
     github_client: GitHubClient,
     cwd: Path,
-    codex_bin: str = "codex",
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
 ) -> None:
     if not task.pull_request:
         raise PipelineError(f"Task {task.id} has no pull request associated.")
@@ -754,7 +764,9 @@ def perform_task_review(
     save_state(cwd, state)
 
     try:
-        result = run_codex_review(prompt, cwd=cwd, codex_bin=codex_bin)
+        result = run_codex_review(
+            prompt, cwd=cwd, tool_name=tool_name, tool_bin=tool_bin
+        )
     except Exception as e:
         # Post error sticky comment
         error_body = format_review_sticky_comment(

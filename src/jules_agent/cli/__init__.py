@@ -79,7 +79,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--codex-bin",
-        help="Path to the codex executable.",
+        help="Path to the codex executable (legacy, use --tool-bin).",
+    )
+    parser.add_argument(
+        "--tool-bin",
+        help="Path to the backend tool executable.",
+    )
+    parser.add_argument(
+        "--tool",
+        help="Backend tool to use (codex, claude, gemini, opencode, copilot, cline).",
+    )
+    parser.add_argument(
+        "--plan-tool",
+        help="Tool override for the planning phase.",
+    )
+    parser.add_argument(
+        "--approve-tool",
+        help="Tool override for the approval phase.",
+    )
+    parser.add_argument(
+        "--feedback-tool",
+        help="Tool override for the feedback phase.",
+    )
+    parser.add_argument(
+        "--review-tool",
+        help="Tool override for the review phase.",
     )
     parser.add_argument(
         "--config",
@@ -286,11 +310,11 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "sync":
             return handle_sync(args, state, client, github_client, cwd)
         elif args.command == "approve":
-            return handle_approve(args, state, client, cwd, parser)
+            return handle_approve(args, state, client, cwd, parser, config=config)
         elif args.command == "feedback":
-            return handle_feedback(args, state, client, cwd, codex_bin, parser)
+            return handle_feedback(args, state, client, cwd, codex_bin, parser, config=config)
         elif args.command == "review":
-            return handle_review(args, state, client, github_client, cwd, codex_bin, parser)
+            return handle_review(args, state, client, github_client, cwd, codex_bin, parser, config=config)
         elif args.command == "send":
             return handle_send(args, state, client, github_client, cwd, parser)
         elif args.command == "merge":

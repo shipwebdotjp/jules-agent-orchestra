@@ -12,6 +12,12 @@ class Config:
     repo: str | None = None
     github_token: str | None = None
     codex_bin: str = "codex"
+    tool_bin: str | None = None
+    tool: str = "codex"
+    plan_tool: str | None = None
+    approve_tool: str | None = None
+    feedback_tool: str | None = None
+    review_tool: str | None = None
     base_url: str = "https://jules.googleapis.com/v1alpha"
     merge_method: str = "merge"
     auto_plan_approval: bool = True
@@ -27,6 +33,12 @@ class Config:
             repo=data.get("repo"),
             github_token=data.get("github_token"),
             codex_bin=data.get("codex_bin", "codex"),
+            tool_bin=data.get("tool_bin"),
+            tool=data.get("tool", "codex"),
+            plan_tool=data.get("plan_tool"),
+            approve_tool=data.get("approve_tool"),
+            feedback_tool=data.get("feedback_tool"),
+            review_tool=data.get("review_tool"),
             base_url=data.get("base_url", "https://jules.googleapis.com/v1alpha"),
             merge_method=data.get("merge_method", "merge"),
             auto_plan_approval=data.get("auto_plan_approval", True),

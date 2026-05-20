@@ -11,7 +11,7 @@ from ...models import State, Task
 from ...pipeline import (
     suggest_reply,
 )
-from ...codex import PipelineError
+from ...codex import PipelineError, resolve_tool_for_phase
 from ...git import CommandRunner, run_command
 from ...persistence import save_state
 from ..io import select_task_interactively
@@ -24,7 +24,8 @@ def run_feedback_loop(
     *,
     cwd: Path,
     client: JulesClient,
-    codex_bin: str,
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
@@ -59,7 +60,8 @@ def run_feedback_loop(
                 feedback_history,
                 cwd=cwd,
                 is_awaiting_plan_approval=is_awaiting_plan_approval,
-                codex_bin=codex_bin,
+                tool_name=tool_name,
+                tool_bin=tool_bin,
                 runner=runner,
             )
         except Exception as e:
@@ -197,8 +199,9 @@ def handle_feedback(
     state: State,
     client: JulesClient,
     cwd: Path,
-    codex_bin: str,
+    codex_bin: str,  # Kept for backward compat in signature but resolve_tool_for_phase preferred
     parser: argparse.ArgumentParser,
+    config: Any = None,
 ) -> int:
     if args.task_id:
         _run, task = resolve_task(state, args.task_id)
@@ -213,11 +216,16 @@ def handle_feedback(
             1, f"Error: Task {task_id_for_print} has not been dispatched yet.\n"
         )
 
+    is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
+    phase = "approve" if is_awaiting_plan_approval else "feedback"
+    tool_name, tool_bin = resolve_tool_for_phase(phase, config, args)
+
     outcome = run_feedback_loop(
         task,
         cwd=cwd,
         client=client,
-        codex_bin=codex_bin,
+        tool_name=tool_name,
+        tool_bin=tool_bin,
     )
     if outcome == "failed":
         return 1

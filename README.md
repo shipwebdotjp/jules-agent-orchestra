@@ -54,7 +54,13 @@ jules-agent [flags] <command> [args]
 ### Global Flags
 
 - `--repo owner/name`: Override the target repository.
-- `--codex-bin /path/to/codex`: Use a specific Codex executable.
+- `--codex-bin /path/to/codex`: Use a specific Codex executable (legacy, use `--tool-bin`).
+- `--tool-bin /path/to/tool`: Path to the backend tool executable.
+- `--tool <name>`: Backend tool to use (`codex`, `claude`, `gemini`, `opencode`, `copilot`, `cline`).
+- `--plan-tool <name>`: Tool override for the planning phase.
+- `--approve-tool <name>`: Tool override for the approval phase.
+- `--feedback-tool <name>`: Tool override for the feedback phase.
+- `--review-tool <name>`: Tool override for the review phase.
 - `--config /path/to/config.toml`: Specify a custom configuration file.
 
 ### Automation Flags (for `advance` and `cron`)
@@ -107,6 +113,11 @@ api_key = "your-jules-api-key"
 repo = "owner/repo"
 github_token = "ghp_your-github-token"
 codex_bin = "codex"
+tool = "codex"
+plan_tool = "claude"
+approve_tool = "gemini"
+feedback_tool = "opencode"
+review_tool = "copilot"
 base_url = "https://jules.googleapis.com/v1alpha"
 merge_method = "rebase"
 ```
