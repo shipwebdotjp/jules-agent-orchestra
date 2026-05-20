@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 import tempfile
-import unittest
+import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from jules_agent.pipeline import (
     ClarificationExchange,
@@ -24,201 +21,106 @@ from jules_agent.pipeline import (
 )
 from jules_agent.models import Subtask
 
+def test_parse_json_document_accepts_code_fences() -> None:
+    payload = parse_json_document(
+        """```json
+        {"strategy":"single_session","tasks":[{"title":"First"}]}
+        ```"""
+    )
+    assert payload["tasks"][0]["title"] == "First"
 
-class PipelineTests(unittest.TestCase):
-    def test_parse_json_document_accepts_code_fences(self) -> None:
-        payload = parse_json_document(
-            """```json
-            {"strategy":"single_session","tasks":[{"title":"First"}]}
-            ```"""
-        )
-        self.assertEqual(payload["tasks"][0]["title"], "First")
-
-    def test_normalize_plan_accepts_objects_and_strings(self) -> None:
-        plan = normalize_plan(
-            {
-                "strategy": "single_session",
-                "tasks": [
-                    {
-                        "title": "Alpha",
-                        "details": "Do the first thing.",
-                        "description": "Legacy description should be ignored.",
-                        "body": "Legacy body should be ignored.",
-                    }
-                ],
-            }
-        )
-        self.assertEqual(plan.strategy, "single_session")
-        self.assertEqual(plan.tasks[0].title, "Alpha")
-        self.assertEqual(plan.tasks[0].details, "Do the first thing.")
-
-    def test_normalize_plan_ignores_legacy_text_aliases(self) -> None:
-        plan = normalize_plan(
-            {
-                "strategy": "single_session",
-                "tasks": [
-                    {
-                        "title": "Alpha",
-                        "description": "Legacy description should be ignored.",
-                        "body": "Legacy body should be ignored.",
-                    }
-                ],
-            }
-        )
-        self.assertEqual(plan.strategy, "single_session")
-        self.assertIsNone(plan.tasks[0].details)
-
-    def test_normalize_subtasks_accepts_legacy_payloads(self) -> None:
-        subtasks = normalize_subtasks(
-            {
-                "subtasks": [
-                    {"title": "Alpha", "details": "Do the first thing."},
-                    "Beta",
-                ]
-            }
-        )
-        self.assertEqual(subtasks[0].title, "Alpha")
-        self.assertEqual(subtasks[0].details, "Do the first thing.")
-        self.assertEqual(subtasks[1].title, "Beta")
-
-    def test_codex_schema_closes_subtask_objects(self) -> None:
-        schema = codex_schema()
-        self.assertFalse(schema["additionalProperties"])
-        self.assertEqual(
-            set(schema["properties"]["strategy"]["enum"]),
-            {"single_session", "sequential_subtasks"},
-        )
-        self.assertEqual(
-            schema["properties"]["tasks"]["items"]["required"],
-            [
-                "title",
-                "details",
-                "acceptance_criteria",
-                "out_of_scope",
+def test_normalize_plan_accepts_objects_and_strings() -> None:
+    plan = normalize_plan(
+        {
+            "strategy": "single_session",
+            "tasks": [
+                {
+                    "title": "Alpha",
+                    "details": "Do the first thing.",
+                    "description": "Legacy description should be ignored.",
+                    "body": "Legacy body should be ignored.",
+                }
             ],
-        )
-        self.assertFalse(schema["properties"]["tasks"]["items"]["additionalProperties"])
-        self.assertEqual(
-            set(schema["properties"]["tasks"]["items"]["properties"].keys()),
-            {
-                "title",
-                "details",
-                "acceptance_criteria",
-                "out_of_scope",
-            },
-        )
+        }
+    )
+    assert plan.strategy == "single_session"
+    assert plan.tasks[0].title == "Alpha"
+    assert plan.tasks[0].details == "Do the first thing."
 
-    def test_clarification_schema_closes_question_objects(self) -> None:
-        schema = clarification_schema()
-        self.assertFalse(schema["additionalProperties"])
-        self.assertEqual(
-            schema["properties"]["questions"]["items"]["required"],
-            ["question", "options"],
-        )
-        self.assertFalse(
-            schema["properties"]["questions"]["items"]["additionalProperties"]
-        )
-        self.assertEqual(
-            set(schema["properties"]["questions"]["items"]["properties"].keys()),
-            {"question", "options"},
-        )
-
-    def test_build_clarified_task_prompt_includes_answers(self) -> None:
-        prompt = build_clarified_task_prompt(
-            "Build a CLI",
-            [
-                ClarificationExchange(
-                    question="Which platform should it target?",
-                    options=["macOS", "Linux"],
-                    answer="macOS",
-                )
+def test_normalize_plan_ignores_legacy_text_aliases() -> None:
+    plan = normalize_plan(
+        {
+            "strategy": "single_session",
+            "tasks": [
+                {
+                    "title": "Alpha",
+                    "description": "Legacy description should be ignored.",
+                    "body": "Legacy body should be ignored.",
+                }
             ],
-        )
+        }
+    )
+    assert plan.strategy == "single_session"
+    assert plan.tasks[0].details is None
 
-        self.assertIn("Build a CLI", prompt)
-        self.assertIn("Clarifications gathered:", prompt)
-        self.assertIn("Which platform should it target?", prompt)
-        self.assertIn("macOS", prompt)
-
-    def test_decompose_task_invokes_codex(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cwd = Path(tmpdir)
-            responses = [
-                subprocess.CompletedProcess(
-                    args=["codex"],
-                    returncode=0,
-                    stdout="",
-                    stderr="",
-                )
+def test_normalize_subtasks_accepts_legacy_payloads() -> None:
+    subtasks = normalize_subtasks(
+        {
+            "subtasks": [
+                {"title": "Alpha", "details": "Do the first thing."},
+                "Beta",
             ]
+        }
+    )
+    assert subtasks[0].title == "Alpha"
+    assert subtasks[0].details == "Do the first thing."
+    assert subtasks[1].title == "Beta"
 
-            def runner(args, *, cwd=None, input_text=None):
-                if "--output-last-message" in args:
-                    last_message_path = Path(
-                        args[args.index("--output-last-message") + 1]
-                    )
-                    last_message_path.write_text(
-                        '{"strategy":"sequential_subtasks","tasks":[{"title":"Plan"},{"title":"Implement"}]}',
-                        encoding="utf-8",
-                    )
-                return responses.pop(0)
+def test_codex_schema_closes_subtask_objects() -> None:
+    schema = codex_schema()
+    assert not schema["additionalProperties"]
+    assert set(schema["properties"]["strategy"]["enum"]) == {"single_session", "sequential_subtasks"}
+    assert schema["properties"]["tasks"]["items"]["required"] == [
+        "title",
+        "details",
+        "acceptance_criteria",
+        "out_of_scope",
+    ]
+    assert not schema["properties"]["tasks"]["items"]["additionalProperties"]
+    assert set(schema["properties"]["tasks"]["items"]["properties"].keys()) == {
+        "title",
+        "details",
+        "acceptance_criteria",
+        "out_of_scope",
+    }
 
-            plan = decompose_task(
-                "build a cli",
-                cwd=cwd,
-                runner=runner,
+def test_clarification_schema_closes_question_objects() -> None:
+    schema = clarification_schema()
+    assert not schema["additionalProperties"]
+    assert schema["properties"]["questions"]["items"]["required"] == ["question", "options"]
+    assert not schema["properties"]["questions"]["items"]["additionalProperties"]
+    assert set(schema["properties"]["questions"]["items"]["properties"].keys()) == {"question", "options"}
+
+def test_build_clarified_task_prompt_includes_answers() -> None:
+    prompt = build_clarified_task_prompt(
+        "Build a CLI",
+        [
+            ClarificationExchange(
+                question="Which platform should it target?",
+                options=["macOS", "Linux"],
+                answer="macOS",
             )
+        ],
+    )
 
-        self.assertEqual(plan.strategy, "sequential_subtasks")
-        self.assertEqual([task.title for task in plan.tasks], ["Plan", "Implement"])
+    assert "Build a CLI" in prompt
+    assert "Clarifications gathered:" in prompt
+    assert "Which platform should it target?" in prompt
+    assert "macOS" in prompt
 
-    def test_dispatch_subtasks_invokes_api(self) -> None:
-        client = MagicMock()
-        client.list_sources.return_value = [
-            {"name": "sources/1", "githubRepo": {"owner": "o1", "repo": "r1"}}
-        ]
-        client.create_session.side_effect = [
-            {"id": "s1", "url": "u1"},
-            {"id": "s2", "url": "u2"},
-        ]
-
-        # Mock git commands
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cwd = Path(tmpdir)
-            subprocess.run(["git", "init"], cwd=cwd, check=True)
-            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
-            subprocess.run(
-                ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
-                cwd=cwd,
-                check=True,
-            )
-            subprocess.run(
-                ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
-            )
-
-            subtasks = [Subtask(title="One"), Subtask(title="Two")]
-            results = dispatch_subtasks(
-                subtasks,
-                cwd=cwd,
-                client=client,
-                strategy="sequential_subtasks",
-            )
-
-            self.assertEqual(len(results), 1)
-            self.assertEqual(results[0].session_id, "s1")
-            self.assertEqual(client.create_session.call_count, 1)
-            self.assertTrue(
-                client.create_session.call_args_list[0].kwargs["require_plan_approval"]
-            )
-
-    def test_run_pipeline_uses_api(self) -> None:
-        client = MagicMock()
-        client.list_sources.return_value = [
-            {"name": "sources/1", "githubRepo": {"owner": "o1", "repo": "r1"}}
-        ]
-        client.create_session.return_value = {"id": "s1"}
-
+def test_decompose_task_invokes_codex() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cwd = Path(tmpdir)
         responses = [
             subprocess.CompletedProcess(
                 args=["codex"],
@@ -230,47 +132,117 @@ class PipelineTests(unittest.TestCase):
 
         def runner(args, *, cwd=None, input_text=None):
             if "--output-last-message" in args:
-                Path(args[args.index("--output-last-message") + 1]).write_text(
-                    '{"strategy":"single_session","tasks":[{"title":"One"}]}',
+                last_message_path = Path(
+                    args[args.index("--output-last-message") + 1]
+                )
+                last_message_path.write_text(
+                    '{"strategy":"sequential_subtasks","tasks":[{"title":"Plan"},{"title":"Implement"}]}',
                     encoding="utf-8",
                 )
             return responses.pop(0)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cwd = Path(tmpdir)
-            subprocess.run(["git", "init"], cwd=cwd, check=True)
-            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
-            subprocess.run(
-                ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
-                cwd=cwd,
-                check=True,
+        plan = decompose_task(
+            "build a cli",
+            cwd=cwd,
+            runner=runner,
+        )
+
+    assert plan.strategy == "sequential_subtasks"
+    assert [task.title for task in plan.tasks] == ["Plan", "Implement"]
+
+def test_dispatch_subtasks_invokes_api() -> None:
+    client = MagicMock()
+    client.list_sources.return_value = [
+        {"name": "sources/1", "githubRepo": {"owner": "o1", "repo": "r1"}}
+    ]
+    client.create_session.side_effect = [
+        {"id": "s1", "url": "u1"},
+        {"id": "s2", "url": "u2"},
+    ]
+
+    # Mock git commands
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cwd = Path(tmpdir)
+        subprocess.run(["git", "init"], cwd=cwd, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
+        subprocess.run(
+            ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
+            cwd=cwd,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
+        )
+
+        subtasks = [Subtask(title="One"), Subtask(title="Two")]
+        results = dispatch_subtasks(
+            subtasks,
+            cwd=cwd,
+            client=client,
+            strategy="sequential_subtasks",
+        )
+
+        assert len(results) == 1
+        assert results[0].session_id == "s1"
+        assert client.create_session.call_count == 1
+        assert client.create_session.call_args_list[0].kwargs["require_plan_approval"]
+
+def test_run_pipeline_uses_api() -> None:
+    client = MagicMock()
+    client.list_sources.return_value = [
+        {"name": "sources/1", "githubRepo": {"owner": "o1", "repo": "r1"}}
+    ]
+    client.create_session.return_value = {"id": "s1"}
+
+    responses = [
+        subprocess.CompletedProcess(
+            args=["codex"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+    ]
+
+    def runner(args, *, cwd=None, input_text=None):
+        if "--output-last-message" in args:
+            Path(args[args.index("--output-last-message") + 1]).write_text(
+                '{"strategy":"single_session","tasks":[{"title":"One"}]}',
+                encoding="utf-8",
             )
-            subprocess.run(
-                ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
-            )
+        return responses.pop(0)
 
-            outcome = run_pipeline(
-                "task",
-                cwd=cwd,
-                client=client,
-                runner=runner,
-            )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cwd = Path(tmpdir)
+        subprocess.run(["git", "init"], cwd=cwd, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
+        subprocess.run(
+            ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
+            cwd=cwd,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
+        )
 
-        self.assertEqual(len(outcome.dispatches), 1)
-        self.assertEqual(outcome.plan.strategy, "single_session")
-        self.assertEqual([task.title for task in outcome.subtasks], ["One"])
-        self.assertEqual(outcome.dispatches[0].session_id, "s1")
+        outcome = run_pipeline(
+            "task",
+            cwd=cwd,
+            client=client,
+            runner=runner,
+        )
 
-    def test_validate_plan_rejects_parallel_subtasks(self) -> None:
-        from jules_agent.models import ExecutionPlan
-        from jules_agent.pipeline import validate_plan
+    assert len(outcome.dispatches) == 1
+    assert outcome.plan.strategy == "single_session"
+    assert [task.title for task in outcome.subtasks] == ["One"]
+    assert outcome.dispatches[0].session_id == "s1"
 
-        plan = ExecutionPlan(strategy="parallel_subtasks", tasks=[Subtask(title="One")])  # type: ignore
-        with self.assertRaises(PipelineError) as cm:
-            validate_plan(plan)
-        self.assertIn("parallel_subtasks", str(cm.exception))
+def test_validate_plan_rejects_parallel_subtasks() -> None:
+    from jules_agent.models import ExecutionPlan
+    from jules_agent.pipeline import validate_plan
 
-
-if __name__ == "__main__":
-    unittest.main()
+    plan = ExecutionPlan(strategy="parallel_subtasks", tasks=[Subtask(title="One")])  # type: ignore
+    with pytest.raises(PipelineError) as cm:
+        validate_plan(plan)
+    assert "parallel_subtasks" in str(cm.value)

@@ -168,7 +168,7 @@ The Codex step expects JSON shaped like this:
 Run the tests with:
 
 ```bash
-python -m unittest discover -s tests
+python3 -m pytest
 ```
 
 The tests cover JSON parsing, subtask normalization, session ID extraction, and the end-to-end pipeline error path.
