@@ -171,6 +171,42 @@ class ClaudeAdapter(GenericBackendAdapter):
     def __init__(self, binary: str = "claude"):
         super().__init__(binary)
 
+    def exec(
+        self,
+        prompt: str,
+        schema: dict[str, object],
+        cwd: Path,
+        runner: CommandRunner,
+    ) -> object:
+        args = [
+            self.binary,
+            "-p",
+            "--json-schema",
+            json.dumps(schema),
+            "--output-format",
+            "json",
+            prompt,
+        ]
+        debug_command(args, cwd, label=self.binary)
+        completed = runner(args, cwd=cwd)
+        if completed.returncode != 0:
+            sanitized_args = [
+                self.binary,
+                "-p",
+                "--json-schema",
+                json.dumps(schema),
+                "--output-format",
+                "json",
+                "<REDACTED_PROMPT>",
+            ]
+            raise PipelineError(
+                f"{self.binary} call failed.\n"
+                f"Command: {' '.join(sanitized_args)}\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
+        return parse_json_document(completed.stdout or "")
+
 
 class GeminiAdapter(GenericBackendAdapter):
     def __init__(self, binary: str = "gemini", skip_trust: bool = False):
