@@ -140,6 +140,25 @@ class OpenCodeAdapter(GenericBackendAdapter):
     def __init__(self, binary: str = "opencode"):
         super().__init__(binary)
 
+    def exec(
+        self,
+        prompt: str,
+        schema: dict[str, object],
+        cwd: Path,
+        runner: CommandRunner,
+    ) -> object:
+        args = [self.binary, "run", "--format", "json", prompt]
+        completed = runner(args, cwd=cwd)
+        if completed.returncode != 0:
+            sanitized_args = [self.binary, "run", "--format", "json", "<REDACTED_PROMPT>"]
+            raise PipelineError(
+                f"{self.binary} run call failed.\n"
+                f"Command: {' '.join(sanitized_args)}\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
+        return parse_json_document(completed.stdout or "")
+
 
 class CopilotAdapter(GenericBackendAdapter):
     def __init__(self, binary: str = "copilot"):
