@@ -13,7 +13,6 @@ from .codex import (
     ClarificationQuestion,
     PipelineError,
     call_backend,
-    call_codex,
     parse_json_document,
 )
 from .git import (
