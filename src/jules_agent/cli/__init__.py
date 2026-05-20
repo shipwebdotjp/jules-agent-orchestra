@@ -90,6 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Backend tool to use (codex, claude, gemini, opencode, copilot, cline).",
     )
     parser.add_argument(
+        "--gemini-skip-trust",
+        action="store_true",
+        default=None,
+        help="Pass --skip-trust to the Gemini CLI adapter.",
+    )
+    parser.add_argument(
         "--plan-tool",
         help="Tool override for the planning phase.",
     )

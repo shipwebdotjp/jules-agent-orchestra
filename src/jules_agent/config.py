@@ -14,6 +14,7 @@ class Config:
     codex_bin: str = "codex"
     tool_bin: str | None = None
     tool: str = "codex"
+    gemini_skip_trust: bool = False
     plan_tool: str | None = None
     approve_tool: str | None = None
     feedback_tool: str | None = None
@@ -35,6 +36,7 @@ class Config:
             codex_bin=data.get("codex_bin", "codex"),
             tool_bin=data.get("tool_bin"),
             tool=data.get("tool", "codex"),
+            gemini_skip_trust=data.get("gemini_skip_trust", False),
             plan_tool=data.get("plan_tool"),
             approve_tool=data.get("approve_tool"),
             feedback_tool=data.get("feedback_tool"),

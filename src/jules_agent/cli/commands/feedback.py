@@ -26,6 +26,7 @@ def run_feedback_loop(
     client: JulesClient,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
@@ -62,6 +63,7 @@ def run_feedback_loop(
                 is_awaiting_plan_approval=is_awaiting_plan_approval,
                 tool_name=tool_name,
                 tool_bin=tool_bin,
+                gemini_skip_trust=gemini_skip_trust,
                 runner=runner,
             )
         except Exception as e:
@@ -218,7 +220,7 @@ def handle_feedback(
 
     is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
     phase = "approve" if is_awaiting_plan_approval else "feedback"
-    tool_name, tool_bin = resolve_tool_for_phase(phase, config, args)
+    tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase(phase, config, args)
 
     outcome = run_feedback_loop(
         task,
@@ -226,6 +228,7 @@ def handle_feedback(
         client=client,
         tool_name=tool_name,
         tool_bin=tool_bin,
+        gemini_skip_trust=gemini_skip_trust,
     )
     if outcome == "failed":
         return 1

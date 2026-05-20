@@ -106,7 +106,7 @@ class AdvanceEngine:
                     if target_task.status == "awaiting_plan_approval"
                     else "feedback"
                 )
-                tool_name, tool_bin = resolve_tool_for_phase(
+                tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase(
                     phase, self.config, self.args
                 )
 
@@ -116,6 +116,7 @@ class AdvanceEngine:
                     client=self.client,
                     tool_name=tool_name,
                     tool_bin=tool_bin,
+                    gemini_skip_trust=gemini_skip_trust,
                     auto_plan_approval=auto_plan_approval,
                     auto_feedback=auto_feedback,
                     allow_skip=True,

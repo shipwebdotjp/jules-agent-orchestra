@@ -105,8 +105,35 @@ class ClaudeAdapter(GenericBackendAdapter):
 
 
 class GeminiAdapter(GenericBackendAdapter):
-    def __init__(self, binary: str = "gemini"):
+    def __init__(self, binary: str = "gemini", skip_trust: bool = False):
         super().__init__(binary)
+        self.skip_trust = skip_trust
+
+    def exec(
+        self,
+        prompt: str,
+        schema: dict[str, object],
+        cwd: Path,
+        runner: CommandRunner,
+    ) -> object:
+        args = [self.binary]
+        if self.skip_trust:
+            args.append("--skip-trust")
+        args.append(prompt)
+
+        completed = runner(args, cwd=cwd)
+        if completed.returncode != 0:
+            sanitized_args = [self.binary]
+            if self.skip_trust:
+                sanitized_args.append("--skip-trust")
+            sanitized_args.append("<REDACTED_PROMPT>")
+            raise PipelineError(
+                f"{self.binary} call failed.\n"
+                f"Command: {' '.join(sanitized_args)}\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
+        return parse_json_document(completed.stdout or "")
 
 
 class OpenCodeAdapter(GenericBackendAdapter):
@@ -175,6 +202,7 @@ def call_backend(
     cwd: Path,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> object:
     adapters: dict[str, type[BackendAdapter]] = {
@@ -190,7 +218,12 @@ def call_backend(
     if not adapter_cls:
         raise PipelineError(f"Unknown tool: {tool_name}")
 
-    if tool_bin:
+    if tool_name == "gemini":
+        adapter = adapter_cls(
+            binary=tool_bin or "gemini",
+            skip_trust=gemini_skip_trust,
+        )
+    elif tool_bin:
         adapter = adapter_cls(binary=tool_bin)
     else:
         adapter = adapter_cls()
@@ -221,7 +254,7 @@ def resolve_tool_for_phase(
     phase: str,
     config: Any,
     args: Any = None,
-) -> tuple[str, str | None]:
+) -> tuple[str, str | None, bool]:
     # 1. Resolve tool name
     tool_name = None
     if args:
@@ -250,4 +283,8 @@ def resolve_tool_for_phase(
         if tool_name == "codex":
             tool_bin = getattr(config, "codex_bin", "codex")
 
-    return tool_name, tool_bin
+    gemini_skip_trust = getattr(args, "gemini_skip_trust", None) if args else None
+    if gemini_skip_trust is None:
+        gemini_skip_trust = getattr(config, "gemini_skip_trust", False)
+
+    return tool_name, tool_bin, bool(gemini_skip_trust) if tool_name == "gemini" else False

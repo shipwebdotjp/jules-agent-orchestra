@@ -34,7 +34,7 @@ def handle_review(
 
     sync_task_state(client, github_client, state, run, task, cwd)
 
-    tool_name, tool_bin = resolve_tool_for_phase("review", config, args)
+    tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("review", config, args)
 
     perform_task_review(
         task=task,
@@ -43,6 +43,7 @@ def handle_review(
         cwd=cwd,
         tool_name=tool_name,
         tool_bin=tool_bin,
+        gemini_skip_trust=gemini_skip_trust,
     )
 
     return 0

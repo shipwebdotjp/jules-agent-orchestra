@@ -57,6 +57,7 @@ jules-agent [flags] <command> [args]
 - `--codex-bin /path/to/codex`: Use a specific Codex executable (legacy, use `--tool-bin`).
 - `--tool-bin /path/to/tool`: Path to the backend tool executable.
 - `--tool <name>`: Backend tool to use (`codex`, `claude`, `gemini`, `opencode`, `copilot`, `cline`).
+- `--gemini-skip-trust`: Pass `--skip-trust` to the Gemini CLI adapter.
 - `--plan-tool <name>`: Tool override for the planning phase.
 - `--approve-tool <name>`: Tool override for the approval phase.
 - `--feedback-tool <name>`: Tool override for the feedback phase.
@@ -117,6 +118,7 @@ github_token = "ghp_your-github-token"
 codex_bin = "codex"
 tool_bin = "path/to/tool"
 tool = "codex"
+gemini_skip_trust = false
 plan_tool = "claude"
 approve_tool = "gemini"
 feedback_tool = "opencode"

@@ -38,6 +38,7 @@ def run_confirmation_loop(
     cwd: Path,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
@@ -50,6 +51,7 @@ def run_confirmation_loop(
             cwd=cwd,
             tool_name=tool_name,
             tool_bin=tool_bin,
+            gemini_skip_trust=gemini_skip_trust,
             runner=runner,
         )
         validate_plan(plan)
@@ -69,6 +71,7 @@ def run_clarification_loop(
     cwd: Path,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
@@ -82,6 +85,7 @@ def run_clarification_loop(
             cwd=cwd,
             tool_name=tool_name,
             tool_bin=tool_bin,
+            gemini_skip_trust=gemini_skip_trust,
             runner=runner,
         )
         if not clarification.has_questions:
@@ -124,13 +128,17 @@ def handle_run(
     cwd: Path,
     config: Config,
 ) -> int:
-    tool_name, tool_bin = resolve_tool_for_phase("plan", config, args)
+    tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", config, args)
     auto_plan_approval = args.auto_plan_approval or config.auto_plan_approval
 
     if args.no_confirm:
         clarified_task = args.task
         plan = decompose_task(
-            clarified_task, cwd=cwd, tool_name=tool_name, tool_bin=tool_bin
+            clarified_task,
+            cwd=cwd,
+            tool_name=tool_name,
+            tool_bin=tool_bin,
+            gemini_skip_trust=gemini_skip_trust,
         )
         validate_plan(plan)
     else:
@@ -139,12 +147,14 @@ def handle_run(
             cwd=cwd,
             tool_name=tool_name,
             tool_bin=tool_bin,
+            gemini_skip_trust=gemini_skip_trust,
         )
         plan = run_confirmation_loop(
             clarified_task,
             cwd=cwd,
             tool_name=tool_name,
             tool_bin=tool_bin,
+            gemini_skip_trust=gemini_skip_trust,
         )
 
     now_iso = (

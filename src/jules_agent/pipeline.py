@@ -318,6 +318,7 @@ def identify_clarifications(
     cwd: Path,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> ClarificationPrompt:
     prompt = build_clarification_prompt(task, clarification_history)
@@ -327,6 +328,7 @@ def identify_clarifications(
         cwd=cwd,
         tool_name=tool_name,
         tool_bin=tool_bin,
+        gemini_skip_trust=gemini_skip_trust,
         runner=runner,
     )
     return normalize_clarification(payload)
@@ -359,6 +361,7 @@ def decompose_task(
     cwd: Path,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> ExecutionPlan:
     prompt = build_codex_prompt(task)
@@ -368,6 +371,7 @@ def decompose_task(
         cwd=cwd,
         tool_name=tool_name,
         tool_bin=tool_bin,
+        gemini_skip_trust=gemini_skip_trust,
         runner=runner,
     )
     return normalize_plan(payload)
@@ -476,6 +480,7 @@ def suggest_reply(
     is_awaiting_plan_approval: bool = False,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
     activities_formatted = format_activities(activities)
@@ -491,6 +496,7 @@ def suggest_reply(
         cwd=cwd,
         tool_name=tool_name,
         tool_bin=tool_bin,
+        gemini_skip_trust=gemini_skip_trust,
         runner=runner,
     )
 
@@ -661,6 +667,7 @@ def run_pipeline(
     repo: str | None = None,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> PipelineOutcome:
     plan = decompose_task(
@@ -668,6 +675,7 @@ def run_pipeline(
         cwd=cwd,
         tool_name=tool_name,
         tool_bin=tool_bin,
+        gemini_skip_trust=gemini_skip_trust,
         runner=runner,
     )
     validate_plan(plan)
@@ -688,6 +696,7 @@ def perform_task_review(
     cwd: Path,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
 ) -> None:
     if not task.pull_request:
         raise PipelineError(f"Task {task.id} has no pull request associated.")
@@ -765,7 +774,11 @@ def perform_task_review(
 
     try:
         result = run_codex_review(
-            prompt, cwd=cwd, tool_name=tool_name, tool_bin=tool_bin
+            prompt,
+            cwd=cwd,
+            tool_name=tool_name,
+            tool_bin=tool_bin,
+            gemini_skip_trust=gemini_skip_trust,
         )
     except Exception as e:
         # Post error sticky comment

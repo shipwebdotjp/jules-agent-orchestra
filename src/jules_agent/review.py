@@ -245,6 +245,7 @@ def run_codex_review(
     cwd: Path,
     tool_name: str = "codex",
     tool_bin: str | None = None,
+    gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
     payload = call_backend(
@@ -253,6 +254,7 @@ def run_codex_review(
         cwd=cwd,
         tool_name=tool_name,
         tool_bin=tool_bin,
+        gemini_skip_trust=gemini_skip_trust,
         runner=runner,
     )
 
