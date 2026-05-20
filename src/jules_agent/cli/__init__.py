@@ -188,7 +188,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rebase and merge",
     )
 
-    subparsers.add_parser("next", help="Dispatch next task in sequential run")
+    next_parser = subparsers.add_parser("next", help="Dispatch next task in sequential run")
+    next_parser.add_argument("run_id", nargs="?", help="Run ID")
 
     advance_parser = subparsers.add_parser(
         "advance", help="Automatically or interactively advance work"

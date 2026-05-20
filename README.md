@@ -49,7 +49,7 @@ jules-agent [flags] <command> [args]
 - `feedback [task_id]`: Enter an interactive feedback loop with Codex to refine a task's plan or reply. If `task_id` is omitted, it shows a list of eligible tasks.
 - `review [task_id]`: Manually run Codex review for a task with an open pull request. If `task_id` is omitted, it shows a list of tasks with open pull requests.
 - `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it shows a list of tasks with open pull requests.
-- `next`: Dispatch the next task in a sequential run.
+- `next [run_id]`: Dispatch the next task in a sequential run. If `run_id` is omitted, it shows a list of active sequential runs with planned tasks.
 
 ### Global Flags
 
