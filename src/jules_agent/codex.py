@@ -234,6 +234,8 @@ def resolve_tool_for_phase(
     if not tool_name:
         tool_name = getattr(config, "tool", "codex")
 
+    tool_name = tool_name.lower()
+
     # 2. Resolve tool binary
     tool_bin = None
     if args:

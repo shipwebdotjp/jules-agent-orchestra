@@ -4,7 +4,7 @@ import argparse
 import datetime
 import hashlib
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from ...client import JulesClient
 from ...models import State, Task

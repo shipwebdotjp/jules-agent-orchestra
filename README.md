@@ -63,6 +63,8 @@ jules-agent [flags] <command> [args]
 - `--review-tool <name>`: Tool override for the review phase.
 - `--config /path/to/config.toml`: Specify a custom configuration file.
 
+The `--tool-bin` flag and `tool_bin` config field allow you to specify the path to the backend tool executable.
+
 ### Automation Flags (for `advance` and `cron`)
 
 - `--auto-plan-approval`: Automatically approve plans when recommended by Codex.
@@ -113,6 +115,7 @@ api_key = "your-jules-api-key"
 repo = "owner/repo"
 github_token = "ghp_your-github-token"
 codex_bin = "codex"
+tool_bin = "path/to/tool"
 tool = "codex"
 plan_tool = "claude"
 approve_tool = "gemini"
