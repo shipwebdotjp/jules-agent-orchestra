@@ -18,6 +18,7 @@ from ..github import GitHubClient
 from ..models import State, Task, TaskStatus, Run
 from ..persistence import save_state
 from .state import sync_task, extract_pull_request_number
+from ..codex import resolve_tool_for_phase
 
 
 class AdvanceEngine:
@@ -100,11 +101,21 @@ class AdvanceEngine:
         try:
             if target_task.status in ("awaiting_plan_approval", "awaiting_user_feedback"):
                 from .commands.feedback import run_feedback_loop
+                phase = (
+                    "approve"
+                    if target_task.status == "awaiting_plan_approval"
+                    else "feedback"
+                )
+                tool_name, tool_bin = resolve_tool_for_phase(
+                    phase, self.config, self.args
+                )
+
                 outcome = run_feedback_loop(
                     target_task,
                     cwd=self.cwd,
                     client=self.client,
-                    codex_bin=self.config.codex_bin,
+                    tool_name=tool_name,
+                    tool_bin=tool_bin,
                     auto_plan_approval=auto_plan_approval,
                     auto_feedback=auto_feedback,
                     allow_skip=True,

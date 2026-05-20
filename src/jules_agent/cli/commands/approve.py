@@ -11,12 +11,16 @@ from ..io import select_task_interactively
 from ..state import get_candidates, resolve_task
 
 
+from typing import Any
+
+
 def handle_approve(
     args: argparse.Namespace,
     state: State,
     client: JulesClient,
     cwd: Path,
     parser: argparse.ArgumentParser,
+    config: Any = None,
 ) -> int:
     if args.task_id:
         _run, task = resolve_task(state, args.task_id)

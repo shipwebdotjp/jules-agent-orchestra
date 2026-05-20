@@ -86,7 +86,8 @@ class CliTests(unittest.TestCase):
             plan = run_confirmation_loop(
                 "Build a CLI",
                 cwd=Path(tmpdir),
-                codex_bin="codex",
+                tool_name="codex",
+                tool_bin="codex",
                 runner=runner,
                 input_func=input_func,
                 output=output_func,
@@ -146,7 +147,8 @@ class CliTests(unittest.TestCase):
             clarified_task = run_clarification_loop(
                 "Build a CLI",
                 cwd=Path(tmpdir),
-                codex_bin="codex",
+                tool_name="codex",
+                tool_bin="codex",
                 runner=runner,
                 input_func=input_func,
                 output=output_func,

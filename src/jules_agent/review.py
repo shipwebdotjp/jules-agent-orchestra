@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .codex import call_codex, PipelineError
+from .codex import call_backend, PipelineError
 from .git import CommandRunner, run_command
 from .github import GitHubClient
 from .models import State, Task, TaskReview, TaskReviewAttempt
@@ -243,14 +243,16 @@ def run_codex_review(
     prompt: str,
     *,
     cwd: Path,
-    codex_bin: str = "codex",
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
     runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
-    payload = call_codex(
+    payload = call_backend(
         prompt,
         codex_review_schema(),
         cwd=cwd,
-        codex_bin=codex_bin,
+        tool_name=tool_name,
+        tool_bin=tool_bin,
         runner=runner,
     )
 

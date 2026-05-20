@@ -16,7 +16,7 @@ from ...pipeline import (
     format_subtask_for_jules,
     validate_plan,
 )
-from ...codex import ClarificationExchange
+from ...codex import ClarificationExchange, resolve_tool_for_phase
 from ...git import CommandRunner, get_git_branch, run_command
 from ...persistence import generate_run_id, save_state
 from ..io import (
@@ -36,7 +36,8 @@ def run_confirmation_loop(
     task: str,
     *,
     cwd: Path,
-    codex_bin: str,
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
@@ -47,7 +48,8 @@ def run_confirmation_loop(
         plan = decompose_task(
             review_task,
             cwd=cwd,
-            codex_bin=codex_bin,
+            tool_name=tool_name,
+            tool_bin=tool_bin,
             runner=runner,
         )
         validate_plan(plan)
@@ -65,7 +67,8 @@ def run_clarification_loop(
     task: str,
     *,
     cwd: Path,
-    codex_bin: str,
+    tool_name: str = "codex",
+    tool_bin: str | None = None,
     runner: CommandRunner = run_command,
     input_func=input,
     output=print,
@@ -77,7 +80,8 @@ def run_clarification_loop(
             task,
             clarification_history,
             cwd=cwd,
-            codex_bin=codex_bin,
+            tool_name=tool_name,
+            tool_bin=tool_bin,
             runner=runner,
         )
         if not clarification.has_questions:
@@ -120,23 +124,27 @@ def handle_run(
     cwd: Path,
     config: Config,
 ) -> int:
-    codex_bin = args.codex_bin or config.codex_bin
+    tool_name, tool_bin = resolve_tool_for_phase("plan", config, args)
     auto_plan_approval = args.auto_plan_approval or config.auto_plan_approval
 
     if args.no_confirm:
         clarified_task = args.task
-        plan = decompose_task(clarified_task, cwd=cwd, codex_bin=codex_bin)
+        plan = decompose_task(
+            clarified_task, cwd=cwd, tool_name=tool_name, tool_bin=tool_bin
+        )
         validate_plan(plan)
     else:
         clarified_task = run_clarification_loop(
             args.task,
             cwd=cwd,
-            codex_bin=codex_bin,
+            tool_name=tool_name,
+            tool_bin=tool_bin,
         )
         plan = run_confirmation_loop(
             clarified_task,
             cwd=cwd,
-            codex_bin=codex_bin,
+            tool_name=tool_name,
+            tool_bin=tool_bin,
         )
 
     now_iso = (

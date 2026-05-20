@@ -20,9 +20,9 @@ class FeedbackTests(unittest.TestCase):
         self.assertIn("awaiting plan approval", prompt)
         self.assertIn("approval_recommended", prompt)
 
-    @patch("jules_agent.pipeline.call_codex")
-    def test_suggest_reply_handles_approval_recommended(self, mock_call_codex) -> None:
-        mock_call_codex.return_value = {
+    @patch("jules_agent.pipeline.call_backend")
+    def test_suggest_reply_handles_approval_recommended(self, mock_call_backend) -> None:
+        mock_call_backend.return_value = {
             "suggestion": "Looks good!",
             "explanation": "The plan is complete.",
             "approval_recommended": True
@@ -39,9 +39,9 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual(result["suggestion"], "Looks good!")
         self.assertTrue(result["approval_recommended"])
 
-    @patch("jules_agent.pipeline.call_codex")
-    def test_suggest_reply_raises_error_on_missing_approval_recommended(self, mock_call_codex) -> None:
-        mock_call_codex.return_value = {
+    @patch("jules_agent.pipeline.call_backend")
+    def test_suggest_reply_raises_error_on_missing_approval_recommended(self, mock_call_backend) -> None:
+        mock_call_backend.return_value = {
             "suggestion": "Looks good!",
             "explanation": "The plan is complete."
         }
@@ -55,12 +55,12 @@ class FeedbackTests(unittest.TestCase):
                 is_awaiting_plan_approval=True
             )
 
-    @patch("jules_agent.pipeline.call_codex")
-    def test_suggest_reply_raises_error_on_invalid_approval_recommended(self, mock_call_codex) -> None:
-        mock_call_codex.return_value = {
+    @patch("jules_agent.pipeline.call_backend")
+    def test_suggest_reply_raises_error_on_invalid_approval_recommended(self, mock_call_backend) -> None:
+        mock_call_backend.return_value = {
             "suggestion": "Looks good!",
             "explanation": "The plan is complete.",
-            "approval_recommended": "not a boolean"
+            "approval_recommended": "yes"
         }
 
         with self.assertRaisesRegex(PipelineError, "approval_recommended.*boolean"):
@@ -104,7 +104,8 @@ class FeedbackTests(unittest.TestCase):
             task,
             cwd=Path("/tmp"),
             client=client,
-            codex_bin="codex",
+            tool_name="codex",
+            tool_bin="codex",
             input_func=input_func,
             output=output_func
         )
@@ -146,7 +147,8 @@ class FeedbackTests(unittest.TestCase):
             task,
             cwd=Path("/tmp"),
             client=client,
-            codex_bin="codex",
+            tool_name="codex",
+            tool_bin="codex",
             input_func=input_func,
             output=output_func
         )
@@ -177,7 +179,8 @@ class FeedbackTests(unittest.TestCase):
             task,
             cwd=Path("/tmp"),
             client=client,
-            codex_bin="codex",
+            tool_name="codex",
+            tool_bin="codex",
             output=output_func
         )
 
