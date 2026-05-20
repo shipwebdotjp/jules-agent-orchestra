@@ -128,6 +128,8 @@ def clarification_schema() -> dict[str, object]:
 
 
 def normalize_subtasks(payload: object) -> list[Subtask]:
+    print(        f" subtasks output: {json.dumps(payload, indent=2)}")
+
     if isinstance(payload, dict):
         raw_items = payload.get("tasks")
         if raw_items is None:
@@ -143,6 +145,7 @@ def normalize_subtasks(payload: object) -> list[Subtask]:
 
 
 def normalize_clarification(payload: object) -> ClarificationPrompt:
+    print(        f" clarification output: {json.dumps(payload, indent=2)}")
     if not isinstance(payload, dict):
         raise PipelineError("Codex output must be a JSON object.")
 

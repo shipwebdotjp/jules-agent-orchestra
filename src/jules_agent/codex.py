@@ -205,6 +205,9 @@ class ClaudeAdapter(GenericBackendAdapter):
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
             )
+        claude_output = parse_json_document(completed.stdout or "")
+        if isinstance(claude_output, dict) and "structured_output" in claude_output:
+            return claude_output["structured_output"]
         return parse_json_document(completed.stdout or "")
 
 
@@ -223,6 +226,8 @@ class GeminiAdapter(GenericBackendAdapter):
         args = [self.binary]
         if self.skip_trust:
             args.append("--skip-trust")
+        prompt += "\n\nRespond only with a JSON object matching the following schema:\n"
+        prompt += json.dumps(schema, indent=2)
         args.append(prompt)
 
         debug_command(args, cwd, label="gemini")
@@ -252,7 +257,9 @@ class OpenCodeAdapter(GenericBackendAdapter):
         cwd: Path,
         runner: CommandRunner,
     ) -> object:
-        args = [self.binary, "run", "--format", "json", prompt]
+        prompt += "\n\nRespond only with a JSON object matching the following schema:\n"
+        prompt += json.dumps(schema, indent=2)
+        args = [self.binary, "run", "--format", "default", prompt]
         debug_command(args, cwd, label="opencode")
         print(
             "DEBUG[opencode]: entering subprocess wait loop "
