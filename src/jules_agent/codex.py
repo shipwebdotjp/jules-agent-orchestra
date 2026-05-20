@@ -249,6 +249,31 @@ class ClineAdapter(GenericBackendAdapter):
     def __init__(self, binary: str = "cline"):
         super().__init__(binary)
 
+    def exec(
+        self,
+        prompt: str,
+        schema: dict[str, object],
+        cwd: Path,
+        runner: CommandRunner,
+    ) -> object:
+        args = [self.binary]
+        prompt += "\n\nRespond only with a JSON object matching the following schema:\n"
+        prompt += json.dumps(schema, indent=2)
+        args.append(prompt)
+
+        debug_command(args, cwd, label="cline")
+        completed = runner(args, cwd=cwd)
+        if completed.returncode != 0:
+            sanitized_args = [self.binary]
+            sanitized_args.append("<REDACTED_PROMPT>")
+            raise PipelineError(
+                f"{self.binary} call failed.\n"
+                f"Command: {' '.join(sanitized_args)}\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
+        return parse_json_document(completed.stdout or "")
+
 
 @dataclass(frozen=True)
 class ClarificationQuestion:
