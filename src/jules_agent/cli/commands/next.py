@@ -12,7 +12,9 @@ from ...pipeline import (
 )
 from ...git import get_git_branch
 from ...persistence import save_state
-from ..state import get_jules_state_mapping
+from ...codex import PipelineError
+from ..state import get_jules_state_mapping, get_candidates
+from ..io import select_task_interactively
 
 
 def handle_next(
@@ -21,25 +23,33 @@ def handle_next(
     client: JulesClient,
     cwd: Path,
 ) -> int:
-    target_run = None
-    for run in reversed(state.runs):
-        if run.strategy == "sequential_subtasks" and run.status == "running":
-            target_run = run
-            break
+    run_id = getattr(args, "run_id", None)
+    if run_id:
+        target_run = None
+        for run in state.runs:
+            if run.id == run_id:
+                target_run = run
+                break
+        if not target_run:
+            raise PipelineError(f"Run {run_id} not found.")
 
-    if not target_run:
-        print("No active sequential run found.")
-        return 0
+        if target_run.strategy != "sequential_subtasks" or target_run.status != "running":
+            raise PipelineError(f"Run {run_id} is not an active sequential run.")
 
-    next_task = None
-    for task in target_run.tasks:
-        if task.status == "planned":
-            next_task = task
-            break
-
-    if not next_task:
-        print("No more tasks to dispatch in this run.")
-        return 0
+        next_task = None
+        for task in target_run.tasks:
+            if task.status == "planned":
+                next_task = task
+                break
+        if not next_task:
+            print(f"No more tasks to dispatch in run {run_id}.")
+            return 0
+    else:
+        candidates = get_candidates(state, "next")
+        if not candidates:
+            print("No active sequential runs with planned tasks found.")
+            return 0
+        target_run, next_task = select_task_interactively(candidates, "next")
 
     source_name = find_source_name(client, state.project.repo)
     starting_branch = get_git_branch(cwd)

@@ -213,6 +213,23 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
                     "pr_created",
                     "waiting_human_review",
                 )
+            elif command == "next":
+                # For 'next', we want the first 'planned' task of a running sequential run.
+                # Since get_candidates iterates over all tasks, we need to be careful.
+                # We only want to return the FIRST planned task for each eligible run.
+                if (
+                    run.strategy == "sequential_subtasks"
+                    and run.status == "running"
+                    and task.status == "planned"
+                ):
+                    # Check if this is the first planned task in this run
+                    first_planned = None
+                    for t in run.tasks:
+                        if t.status == "planned":
+                            first_planned = t
+                            break
+                    if first_planned and first_planned.id == task.id:
+                        eligible = True
 
             if eligible:
                 candidates.append((run, task))
