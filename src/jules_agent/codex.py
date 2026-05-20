@@ -3,7 +3,11 @@ from __future__ import annotations
 import abc
 import json
 import re
+import shlex
+import sys
+import subprocess
 import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,6 +17,68 @@ from .git import CommandRunner, is_git_repo, run_command
 
 class PipelineError(RuntimeError):
     pass
+
+
+def debug_command(args: list[str], cwd: Path, *, label: str | None = None) -> None:
+    prefix = "DEBUG" if label is None else f"DEBUG[{label}]"
+    print(
+        f"{prefix}: running command (cwd={cwd}): {shlex.join(args)}",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def run_opencode_command(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    print(
+        "DEBUG[opencode]: stdin=DEVNULL stdout=PIPE stderr=PIPE (live streaming enabled)",
+        file=sys.stderr,
+        flush=True,
+    )
+    proc = subprocess.Popen(
+        args,
+        cwd=str(cwd),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    print(f"DEBUG[opencode]: spawned pid={proc.pid}", file=sys.stderr, flush=True)
+
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+
+    def pump(stream: Any, sink: list[str], stream_name: str) -> None:
+        assert stream is not None
+        for line in iter(stream.readline, ""):
+            sink.append(line)
+            print(
+                f"DEBUG[opencode:{stream_name}] {line.rstrip()}",
+                file=sys.stderr,
+                flush=True,
+            )
+        stream.close()
+
+    threads = [
+        threading.Thread(target=pump, args=(proc.stdout, stdout_lines, "stdout"), daemon=True),
+        threading.Thread(target=pump, args=(proc.stderr, stderr_lines, "stderr"), daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+
+    returncode = proc.wait()
+    for thread in threads:
+        thread.join()
+
+    stdout = "".join(stdout_lines)
+    stderr = "".join(stderr_lines)
+    print(
+        "DEBUG[opencode]: process exited "
+        f"returncode={returncode} stdout_bytes={len(stdout)} stderr_bytes={len(stderr)}",
+        file=sys.stderr,
+        flush=True,
+    )
+    return subprocess.CompletedProcess(args=args, returncode=returncode, stdout=stdout, stderr=stderr)
 
 
 class BackendAdapter(abc.ABC):
@@ -57,6 +123,7 @@ class CodexAdapter(BackendAdapter):
                 args.append("--skip-git-repo-check")
             args.append(prompt)
 
+            debug_command(args, cwd, label="codex")
             completed = runner(args, cwd=cwd)
             if completed.returncode != 0:
                 sanitized_args = list(args[:-1]) + ["<REDACTED_PROMPT>"]
@@ -87,6 +154,7 @@ class GenericBackendAdapter(BackendAdapter):
         runner: CommandRunner,
     ) -> object:
         args = [self.binary, prompt]
+        debug_command(args, cwd, label=self.binary)
         completed = runner(args, cwd=cwd)
         if completed.returncode != 0:
             sanitized_args = [self.binary, "<REDACTED_PROMPT>"]
@@ -121,6 +189,7 @@ class GeminiAdapter(GenericBackendAdapter):
             args.append("--skip-trust")
         args.append(prompt)
 
+        debug_command(args, cwd, label="gemini")
         completed = runner(args, cwd=cwd)
         if completed.returncode != 0:
             sanitized_args = [self.binary]
@@ -148,7 +217,17 @@ class OpenCodeAdapter(GenericBackendAdapter):
         runner: CommandRunner,
     ) -> object:
         args = [self.binary, "run", "--format", "json", prompt]
-        completed = runner(args, cwd=cwd)
+        debug_command(args, cwd, label="opencode")
+        print(
+            "DEBUG[opencode]: entering subprocess wait loop "
+            f"(prompt_chars={len(prompt)}, runner_is_default={runner is run_command})",
+            file=sys.stderr,
+            flush=True,
+        )
+        if runner is run_command:
+            completed = run_opencode_command(args, cwd)
+        else:
+            completed = runner(args, cwd=cwd)
         if completed.returncode != 0:
             sanitized_args = [self.binary, "run", "--format", "json", "<REDACTED_PROMPT>"]
             raise PipelineError(
