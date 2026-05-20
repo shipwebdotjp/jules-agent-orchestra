@@ -5,9 +5,7 @@ import json
 import re
 import shlex
 import sys
-import subprocess
 import tempfile
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,59 +24,6 @@ def debug_command(args: list[str], cwd: Path, *, label: str | None = None) -> No
         file=sys.stderr,
         flush=True,
     )
-
-
-def run_opencode_command(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    print(
-        "DEBUG[opencode]: stdin=DEVNULL stdout=PIPE stderr=PIPE (live streaming enabled)",
-        file=sys.stderr,
-        flush=True,
-    )
-    proc = subprocess.Popen(
-        args,
-        cwd=str(cwd),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-    )
-    print(f"DEBUG[opencode]: spawned pid={proc.pid}", file=sys.stderr, flush=True)
-
-    stdout_lines: list[str] = []
-    stderr_lines: list[str] = []
-
-    def pump(stream: Any, sink: list[str], stream_name: str) -> None:
-        assert stream is not None
-        for line in iter(stream.readline, ""):
-            sink.append(line)
-            print(
-                f"DEBUG[opencode:{stream_name}] {line.rstrip()}",
-                file=sys.stderr,
-                flush=True,
-            )
-        stream.close()
-
-    threads = [
-        threading.Thread(target=pump, args=(proc.stdout, stdout_lines, "stdout"), daemon=True),
-        threading.Thread(target=pump, args=(proc.stderr, stderr_lines, "stderr"), daemon=True),
-    ]
-    for thread in threads:
-        thread.start()
-
-    returncode = proc.wait()
-    for thread in threads:
-        thread.join()
-
-    stdout = "".join(stdout_lines)
-    stderr = "".join(stderr_lines)
-    print(
-        "DEBUG[opencode]: process exited "
-        f"returncode={returncode} stdout_bytes={len(stdout)} stderr_bytes={len(stderr)}",
-        file=sys.stderr,
-        flush=True,
-    )
-    return subprocess.CompletedProcess(args=args, returncode=returncode, stdout=stdout, stderr=stderr)
 
 
 class BackendAdapter(abc.ABC):
@@ -260,19 +205,9 @@ class OpenCodeAdapter(GenericBackendAdapter):
         prompt += "\n\nRespond only with a JSON object matching the following schema:\n"
         prompt += json.dumps(schema, indent=2)
         args = [self.binary, "run", "--format", "default", prompt]
-        debug_command(args, cwd, label="opencode")
-        print(
-            "DEBUG[opencode]: entering subprocess wait loop "
-            f"(prompt_chars={len(prompt)}, runner_is_default={runner is run_command})",
-            file=sys.stderr,
-            flush=True,
-        )
-        if runner is run_command:
-            completed = run_opencode_command(args, cwd)
-        else:
-            completed = runner(args, cwd=cwd)
+        completed = runner(args, cwd=cwd)
         if completed.returncode != 0:
-            sanitized_args = [self.binary, "run", "--format", "json", "<REDACTED_PROMPT>"]
+            sanitized_args = [self.binary, "run", "--format", "default", "<REDACTED_PROMPT>"]
             raise PipelineError(
                 f"{self.binary} run call failed.\n"
                 f"Command: {' '.join(sanitized_args)}\n"
@@ -285,6 +220,29 @@ class OpenCodeAdapter(GenericBackendAdapter):
 class CopilotAdapter(GenericBackendAdapter):
     def __init__(self, binary: str = "copilot"):
         super().__init__(binary)
+
+    def exec(
+        self,
+        prompt: str,
+        schema: dict[str, object],
+        cwd: Path,
+        runner: CommandRunner,
+    ) -> object:
+        prompt += "\n\nRespond only with a JSON object matching the following schema:\n"
+        prompt += json.dumps(schema, indent=2)
+        args = [self.binary, "-p", prompt, "-s", "--no-ask-user"]
+
+        debug_command(args, cwd, label="copilot")
+        completed = runner(args, cwd=cwd)
+        if completed.returncode != 0:
+            sanitized_args = [self.binary, "-p", "<REDACTED_PROMPT>", "-s", "--no-ask-user"]
+            raise PipelineError(
+                f"{self.binary} call failed.\n"
+                f"Command: {' '.join(sanitized_args)}\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
+        return parse_json_document(completed.stdout or "")
 
 
 class ClineAdapter(GenericBackendAdapter):
