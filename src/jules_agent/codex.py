@@ -286,6 +286,29 @@ class CopilotAdapter(GenericBackendAdapter):
     def __init__(self, binary: str = "copilot"):
         super().__init__(binary)
 
+    def exec(
+        self,
+        prompt: str,
+        schema: dict[str, object],
+        cwd: Path,
+        runner: CommandRunner,
+    ) -> object:
+        prompt += "\n\nRespond only with a JSON object matching the following schema:\n"
+        prompt += json.dumps(schema, indent=2)
+        args = [self.binary, "-p", prompt, "-s", "--no-ask-user"]
+
+        debug_command(args, cwd, label="copilot")
+        completed = runner(args, cwd=cwd)
+        if completed.returncode != 0:
+            sanitized_args = [self.binary, "-p", "<REDACTED_PROMPT>", "-s", "--no-ask-user"]
+            raise PipelineError(
+                f"{self.binary} call failed.\n"
+                f"Command: {' '.join(sanitized_args)}\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
+        return parse_json_document(completed.stdout or "")
+
 
 class ClineAdapter(GenericBackendAdapter):
     def __init__(self, binary: str = "cline"):
