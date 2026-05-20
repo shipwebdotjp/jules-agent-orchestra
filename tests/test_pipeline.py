@@ -21,6 +21,23 @@ from jules_agent.pipeline import (
 )
 from jules_agent.models import Subtask
 
+@pytest.fixture
+def git_repo_path():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cwd = Path(tmpdir)
+        subprocess.run(["git", "init"], cwd=cwd, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
+        subprocess.run(
+            ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
+            cwd=cwd,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
+        )
+        yield cwd
+
 def test_parse_json_document_accepts_code_fences() -> None:
     payload = parse_json_document(
         """```json
@@ -150,7 +167,7 @@ def test_decompose_task_invokes_codex() -> None:
     assert plan.strategy == "sequential_subtasks"
     assert [task.title for task in plan.tasks] == ["Plan", "Implement"]
 
-def test_dispatch_subtasks_invokes_api() -> None:
+def test_dispatch_subtasks_invokes_api(git_repo_path: Path) -> None:
     client = MagicMock()
     client.list_sources.return_value = [
         {"name": "sources/1", "githubRepo": {"owner": "o1", "repo": "r1"}}
@@ -160,35 +177,20 @@ def test_dispatch_subtasks_invokes_api() -> None:
         {"id": "s2", "url": "u2"},
     ]
 
-    # Mock git commands
-    with tempfile.TemporaryDirectory() as tmpdir:
-        cwd = Path(tmpdir)
-        subprocess.run(["git", "init"], cwd=cwd, check=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
-        subprocess.run(
-            ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
-            cwd=cwd,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
-        )
+    subtasks = [Subtask(title="One"), Subtask(title="Two")]
+    results = dispatch_subtasks(
+        subtasks,
+        cwd=git_repo_path,
+        client=client,
+        strategy="sequential_subtasks",
+    )
 
-        subtasks = [Subtask(title="One"), Subtask(title="Two")]
-        results = dispatch_subtasks(
-            subtasks,
-            cwd=cwd,
-            client=client,
-            strategy="sequential_subtasks",
-        )
+    assert len(results) == 1
+    assert results[0].session_id == "s1"
+    assert client.create_session.call_count == 1
+    assert client.create_session.call_args_list[0].kwargs["require_plan_approval"]
 
-        assert len(results) == 1
-        assert results[0].session_id == "s1"
-        assert client.create_session.call_count == 1
-        assert client.create_session.call_args_list[0].kwargs["require_plan_approval"]
-
-def test_run_pipeline_uses_api() -> None:
+def test_run_pipeline_uses_api(git_repo_path: Path) -> None:
     client = MagicMock()
     client.list_sources.return_value = [
         {"name": "sources/1", "githubRepo": {"owner": "o1", "repo": "r1"}}
@@ -212,26 +214,12 @@ def test_run_pipeline_uses_api() -> None:
             )
         return responses.pop(0)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        cwd = Path(tmpdir)
-        subprocess.run(["git", "init"], cwd=cwd, check=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=cwd, check=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=cwd, check=True)
-        subprocess.run(
-            ["git", "remote", "add", "origin", "https://github.com/o1/r1.git"],
-            cwd=cwd,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", "initial"], cwd=cwd, check=True
-        )
-
-        outcome = run_pipeline(
-            "task",
-            cwd=cwd,
-            client=client,
-            runner=runner,
-        )
+    outcome = run_pipeline(
+        "task",
+        cwd=git_repo_path,
+        client=client,
+        runner=runner,
+    )
 
     assert len(outcome.dispatches) == 1
     assert outcome.plan.strategy == "single_session"
