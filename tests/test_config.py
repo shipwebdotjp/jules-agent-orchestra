@@ -10,20 +10,20 @@ def test_config_from_dict() -> None:
     data = {
         "api_key": "test-key",
         "repo": "owner/repo",
-        "codex_bin": "/path/to/codex",
+        "tool_bin": "/path/to/tool",
         "base_url": "https://example.com/v1",
     }
     config = Config.from_dict(data)
     assert config.api_key == "test-key"
     assert config.repo == "owner/repo"
-    assert config.codex_bin == "/path/to/codex"
+    assert config.tool_bin == "/path/to/tool"
     assert config.base_url == "https://example.com/v1"
 
 def test_config_defaults() -> None:
     config = Config.from_dict({})
     assert config.api_key is None
     assert config.repo is None
-    assert config.codex_bin == "codex"
+    assert config.tool_bin is None
     assert config.base_url == "https://jules.googleapis.com/v1alpha"
 
 def test_load_config_merging() -> None:
@@ -40,7 +40,7 @@ def test_load_config_merging() -> None:
         config_cwd = cwd_dir / "jules-agent.toml"
 
         config_home.write_text('api_key = "home-key"\nrepo = "home-repo"', encoding="utf-8")
-        config_cwd.write_text('api_key = "cwd-key"\ncodex_bin = "cwd-codex"', encoding="utf-8")
+        config_cwd.write_text('api_key = "cwd-key"\ntool_bin = "cwd-tool"', encoding="utf-8")
 
         with patch("jules_agent.config.Path.home", return_value=home_dir):
             with patch("jules_agent.config.Path.cwd", return_value=cwd_dir):
@@ -50,8 +50,8 @@ def test_load_config_merging() -> None:
                 assert config.api_key == "cwd-key"
                 # home-repo should be kept
                 assert config.repo == "home-repo"
-                # cwd-codex should be used
-                assert config.codex_bin == "cwd-codex"
+                # cwd-tool should be used
+                assert config.tool_bin == "cwd-tool"
 
 def test_load_config_from_path() -> None:
     with TemporaryDirectory() as tmpdir:
@@ -68,4 +68,4 @@ def test_load_config_invalid_toml_ignored() -> None:
         config_path.write_text("invalid = toml [", encoding="utf-8")
 
         config = load_config(config_path)
-        assert config.codex_bin == "codex"  # Still has defaults
+        assert config.tool_bin is None  # Still has defaults

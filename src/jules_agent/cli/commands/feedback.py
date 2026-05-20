@@ -201,7 +201,6 @@ def handle_feedback(
     state: State,
     client: JulesClient,
     cwd: Path,
-    codex_bin: str,  # Kept for backward compat in signature but resolve_tool_for_phase preferred
     parser: argparse.ArgumentParser,
     config: Any = None,
 ) -> int:

@@ -78,10 +78,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional Jules repo override, for example owner/name.",
     )
     parser.add_argument(
-        "--codex-bin",
-        help="Path to the codex executable (legacy, use --tool-bin).",
-    )
-    parser.add_argument(
         "--tool-bin",
         help="Path to the backend tool executable.",
     )
@@ -277,7 +273,6 @@ def main(argv: list[str] | None = None) -> int:
     github_token = os.environ.get("GITHUB_TOKEN") or config.github_token
 
     repo = args.repo or config.repo
-    codex_bin = args.codex_bin or config.codex_bin
     base_url = config.base_url
     
 
@@ -318,9 +313,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "approve":
             return handle_approve(args, state, client, cwd, parser, config=config)
         elif args.command == "feedback":
-            return handle_feedback(args, state, client, cwd, codex_bin, parser, config=config)
+            return handle_feedback(args, state, client, cwd, parser, config=config)
         elif args.command == "review":
-            return handle_review(args, state, client, github_client, cwd, codex_bin, parser, config=config)
+            return handle_review(args, state, client, github_client, cwd, parser, config=config)
         elif args.command == "send":
             return handle_send(args, state, client, github_client, cwd, parser)
         elif args.command == "merge":

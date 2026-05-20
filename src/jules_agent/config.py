@@ -11,7 +11,6 @@ class Config:
     api_key: str | None = None
     repo: str | None = None
     github_token: str | None = None
-    codex_bin: str = "codex"
     tool_bin: str | None = None
     tool: str = "codex"
     gemini_skip_trust: bool = False
@@ -33,7 +32,6 @@ class Config:
             api_key=data.get("api_key"),
             repo=data.get("repo"),
             github_token=data.get("github_token"),
-            codex_bin=data.get("codex_bin", "codex"),
             tool_bin=data.get("tool_bin"),
             tool=data.get("tool", "codex"),
             gemini_skip_trust=data.get("gemini_skip_trust", False),

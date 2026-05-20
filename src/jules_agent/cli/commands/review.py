@@ -19,7 +19,6 @@ def handle_review(
     client: JulesClient,
     github_client: GitHubClient | None,
     cwd: Path,
-    codex_bin: str,
     parser: argparse.ArgumentParser,
     config: Any = None,
 ) -> int:

@@ -330,25 +330,6 @@ def call_backend(
     return adapter.exec(prompt, schema, cwd, runner)
 
 
-def call_codex(
-    prompt: str,
-    schema: dict[str, object],
-    *,
-    cwd: Path,
-    codex_bin: str = "codex",
-    runner: CommandRunner = run_command,
-) -> object:
-    # Legacy wrapper for backward compatibility during refactoring
-    return call_backend(
-        prompt,
-        schema,
-        cwd=cwd,
-        tool_name="codex",
-        tool_bin=codex_bin,
-        runner=runner,
-    )
-
-
 def resolve_tool_for_phase(
     phase: str,
     config: Any,
@@ -372,15 +353,9 @@ def resolve_tool_for_phase(
     tool_bin = None
     if args:
         tool_bin = getattr(args, "tool_bin", None)
-        if not tool_bin:
-            tool_bin = getattr(args, "codex_bin", None)
 
     if not tool_bin:
         tool_bin = getattr(config, "tool_bin", None)
-
-    if not tool_bin:
-        if tool_name == "codex":
-            tool_bin = getattr(config, "codex_bin", "codex")
 
     gemini_skip_trust = getattr(args, "gemini_skip_trust", None) if args else None
     if gemini_skip_trust is None:

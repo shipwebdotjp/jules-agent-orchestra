@@ -54,7 +54,6 @@ jules-agent [flags] <command> [args]
 ### Global Flags
 
 - `--repo owner/name`: Override the target repository.
-- `--codex-bin /path/to/codex`: Use a specific Codex executable (legacy, use `--tool-bin`).
 - `--tool-bin /path/to/tool`: Path to the backend tool executable.
 - `--tool <name>`: Backend tool to use (`codex`, `claude`, `gemini`, `opencode`, `copilot`, `cline`).
 - `--gemini-skip-trust`: Pass `--skip-trust` to the Gemini CLI adapter.
@@ -115,7 +114,6 @@ Need permissions:
 api_key = "your-jules-api-key"
 repo = "owner/repo"
 github_token = "ghp_your-github-token"
-codex_bin = "codex"
 tool_bin = "path/to/tool"
 tool = "codex"
 gemini_skip_trust = false
