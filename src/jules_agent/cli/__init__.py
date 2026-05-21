@@ -134,6 +134,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_parser = subparsers.add_parser("status", help="Show local state")
     status_parser.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help="Show all runs (default shows only planned and running)",
+    )
+    status_parser.add_argument(
         "--show-activities",
         action="store_true",
         help="Show session activities",
