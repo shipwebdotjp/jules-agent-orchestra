@@ -200,6 +200,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     next_parser = subparsers.add_parser("next", help="Dispatch next task in sequential run")
     next_parser.add_argument("run_id", nargs="?", help="Run ID")
+    next_parser.add_argument(
+        "--automation-mode",
+        help="Automation mode for the Jules session (e.g., AUTO_CREATE_PR).",
+    )
 
     advance_parser = subparsers.add_parser(
         "advance", help="Automatically or interactively advance work"
@@ -332,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "merge":
             return handle_merge(args, state, client, github_client, cwd, config, parser)
         elif args.command == "next":
-            return handle_next(args, state, client, cwd)
+            return handle_next(args, state, client, cwd, config)
 
     except PipelineError as exc:
         parser.exit(1, f"{exc}\n")

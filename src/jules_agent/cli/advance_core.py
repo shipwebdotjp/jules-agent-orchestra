@@ -7,18 +7,75 @@ try:
 except ImportError:
     fcntl = None
 import json
-import os
 import sys
 from pathlib import Path
-from typing import Any, Literal
 
 from ..client import JulesClient
 from ..config import Config
 from ..github import GitHubClient
-from ..models import State, Task, TaskStatus, Run
+from ..models import State, Task, TaskStatus, Run, JulesSessionInfo
 from ..persistence import save_state
-from .state import sync_task, extract_pull_request_number
+from ..pipeline import find_source_name
+from ..git import get_git_branch
+from .state import (
+    get_candidates,
+    sync_task,
+    extract_pull_request_number,
+    get_jules_state_mapping,
+)
 from ..codex import resolve_tool_for_phase
+
+
+def dispatch_task(
+    task: Task,
+    run: Run,
+    state: State,
+    client: JulesClient,
+    cwd: Path,
+    config: Config,
+    args: argparse.Namespace,
+    *,
+    verbose: bool = True,
+) -> None:
+    source_name = find_source_name(client, state.project.repo)
+    starting_branch = get_git_branch(cwd)
+    automation_mode = getattr(args, "automation_mode", None) or getattr(config, "automation_mode", None) or "AUTO_CREATE_PR"
+
+    if verbose:
+        print(f"Dispatching next task: {task.id} - {task.title}")
+    task.status = "dispatching"
+    save_state(cwd, state)
+    try:
+        session = client.create_session(
+            prompt=task.prompt or task.title,
+            source_name=source_name,
+            starting_branch=starting_branch,
+            title=task.title,
+            require_plan_approval=False,
+            automation_mode=automation_mode,
+        )
+        task.jules = JulesSessionInfo(
+            session_id=session["id"],
+            session_name=session["name"],
+            state=session.get("state", "QUEUED"),
+            session_url=session.get("url"),
+            create_time=session.get("createTime"),
+            update_time=session.get("updateTime"),
+        )
+        task.status = get_jules_state_mapping(task.jules.state, False)
+        if verbose:
+            print(f"  Success: {task.jules.session_url}")
+    except Exception as e:
+        task.status = "failed"
+        if verbose:
+            print(f"  Failed: {e}", file=sys.stderr)
+
+    task.updated_at = (
+        datetime.datetime.now(datetime.timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    save_state(cwd, state)
 
 
 class AdvanceEngine:
@@ -67,6 +124,31 @@ class AdvanceEngine:
 
         target_run, target_task = selected
         previous_status = target_task.status
+
+        if target_task.status == "planned":
+            dispatch_task(
+                task=target_task,
+                run=target_run,
+                state=self.state,
+                client=self.client,
+                cwd=self.cwd,
+                config=self.config,
+                args=self.args,
+                verbose=not self.output_json,
+            )
+
+            if self.output_json:
+                print(json.dumps({
+                    "status": target_task.status,
+                    "action": "dispatched_planned",
+                    "run_id": target_run.id,
+                    "task_id": target_task.id,
+                    "previous_status": previous_status,
+                    "next_status": target_task.status,
+                    "reason": None,
+                    "exit_code": 0,
+                }))
+            return 0
 
         if not self.output_json:
             print(f"Advancing task: {target_task.id} - {target_task.title} (Status: {target_task.status})")
@@ -179,6 +261,10 @@ class AdvanceEngine:
             # Always save state after an action to persist advance_state updates (e.g. idempotency keys)
             save_state(self.cwd, self.state)
 
+            # For sequential_subtasks, dispatch next planned task after merge
+            if action_name == "merged" and target_run.strategy == "sequential_subtasks":
+                self._dispatch_next_planned(target_run)
+
         if self.output_json:
             print(json.dumps({
                 "status": target_task.status,
@@ -210,13 +296,40 @@ class AdvanceEngine:
                 counter += 1
 
         if not eligible_tasks:
-            return None
+            planned_candidates = get_candidates(self.state, "next")
+            if not planned_candidates:
+                return None
+            return planned_candidates[0]
 
         # Sort by updated_at (descending) then traversal order (ascending)
         # Using -index for ascending order when reverse=True
         eligible_tasks.sort(key=lambda x: (x[1].updated_at, -x[2]), reverse=True)
 
         return eligible_tasks[0][0], eligible_tasks[0][1]
+
+    def _dispatch_next_planned(self, run: Run) -> None:
+        if run.strategy != "sequential_subtasks" or run.status != "running":
+            return
+
+        next_task = None
+        for task in run.tasks:
+            if task.status == "planned":
+                next_task = task
+                break
+
+        if not next_task:
+            return
+
+        dispatch_task(
+            task=next_task,
+            run=run,
+            state=self.state,
+            client=self.client,
+            cwd=self.cwd,
+            config=self.config,
+            args=self.args,
+            verbose=not self.output_json,
+        )
 
     def _attempt_merge(self, task: Task) -> bool | None:
         if not self.github_client:

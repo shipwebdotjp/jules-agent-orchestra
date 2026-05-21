@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 import argparse
-import datetime
-import sys
 from pathlib import Path
 
 from ...client import JulesClient
-from ...models import JulesSessionInfo, State
-from ...pipeline import (
-    find_source_name,
-)
-from ...git import get_git_branch
-from ...persistence import save_state
+from ...config import Config
+from ...models import State
 from ...codex import PipelineError
-from ..state import get_jules_state_mapping, get_candidates
+from ..state import get_candidates
 from ..io import select_task_interactively
+from ..advance_core import dispatch_task
 
 
 def handle_next(
@@ -22,6 +17,7 @@ def handle_next(
     state: State,
     client: JulesClient,
     cwd: Path,
+    config: Config,
 ) -> int:
     run_id = getattr(args, "run_id", None)
     if run_id:
@@ -51,39 +47,5 @@ def handle_next(
             return 0
         target_run, next_task = select_task_interactively(candidates, "next")
 
-    source_name = find_source_name(client, state.project.repo)
-    starting_branch = get_git_branch(cwd)
-
-    print(f"Dispatching next task: {next_task.id} - {next_task.title}")
-    next_task.status = "dispatching"
-    save_state(cwd, state)
-    try:
-        session = client.create_session(
-            prompt=next_task.prompt or next_task.title,
-            source_name=source_name,
-            starting_branch=starting_branch,
-            title=next_task.title,
-            require_plan_approval=False,
-            automation_mode="AUTO_CREATE_PR",
-        )
-        next_task.jules = JulesSessionInfo(
-            session_id=session["id"],
-            session_name=session["name"],
-            state=session.get("state", "QUEUED"),
-            session_url=session.get("url"),
-            create_time=session.get("createTime"),
-            update_time=session.get("updateTime"),
-        )
-        next_task.status = get_jules_state_mapping(next_task.jules.state, False)
-        print(f"  Success: {next_task.jules.session_url}")
-    except Exception as e:
-        next_task.status = "failed"
-        print(f"  Failed: {e}", file=sys.stderr)
-
-    next_task.updated_at = (
-        datetime.datetime.now(datetime.timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-    save_state(cwd, state)
+    dispatch_task(next_task, target_run, state, client, cwd, config, args)
     return 0

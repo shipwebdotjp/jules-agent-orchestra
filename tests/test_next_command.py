@@ -7,6 +7,7 @@ from pathlib import Path
 import argparse
 
 from jules_agent.models import State, ProjectState, Run, Task, JulesSessionInfo
+from jules_agent.config import Config
 from jules_agent.cli.commands.next import handle_next
 from jules_agent.cli.state import get_candidates
 from jules_agent.codex import PipelineError
@@ -50,14 +51,14 @@ def test_get_candidates_next(sequential_state):
     assert task.id == "task2"
 
 @patch("jules_agent.cli.commands.next.select_task_interactively")
-@patch("jules_agent.cli.commands.next.JulesClient")
-@patch("jules_agent.cli.commands.next.save_state")
-@patch("jules_agent.cli.commands.next.get_git_branch", return_value="main")
-@patch("jules_agent.cli.commands.next.find_source_name", return_value="test_source")
+@patch("jules_agent.cli.advance_core.save_state")
+@patch("jules_agent.cli.advance_core.get_git_branch", return_value="main")
+@patch("jules_agent.cli.advance_core.find_source_name", return_value="test_source")
 def test_handle_next_interactive(
-    mock_find_source, mock_get_branch, mock_save_state, mock_client, mock_select, sequential_state
+    mock_find_source, mock_get_branch, mock_save_state, mock_select, sequential_state
 ):
-    args = argparse.Namespace(run_id=None)
+    args = argparse.Namespace(run_id=None, automation_mode=None)
+    mock_client = MagicMock()
     mock_client.create_session.return_value = {
         "id": "new_sess_id",
         "name": "new_sess_name",
@@ -70,14 +71,14 @@ def test_handle_next_interactive(
     task2 = run1.tasks[1]
     mock_select.return_value = (run1, task2)
 
-    handle_next(args, sequential_state, mock_client, Path("/tmp"))
+    handle_next(args, sequential_state, mock_client, Path("/tmp"), Config())
 
     assert task2.status == "dispatched"
     assert task2.jules.session_id == "new_sess_id"
     mock_client.create_session.assert_called_once()
 
 def test_handle_next_with_run_id(sequential_state):
-    args = argparse.Namespace(run_id="run1")
+    args = argparse.Namespace(run_id="run1", automation_mode=None)
     mock_client = MagicMock()
     mock_client.create_session.return_value = {
         "id": "new_sess_id",
@@ -86,24 +87,24 @@ def test_handle_next_with_run_id(sequential_state):
         "url": "http://jules/new"
     }
 
-    with patch("jules_agent.cli.commands.next.save_state"), \
-         patch("jules_agent.cli.commands.next.get_git_branch", return_value="main"), \
-         patch("jules_agent.cli.commands.next.find_source_name", return_value="test_source"):
-        handle_next(args, sequential_state, mock_client, Path("/tmp"))
+    with patch("jules_agent.cli.advance_core.save_state"), \
+          patch("jules_agent.cli.advance_core.get_git_branch", return_value="main"), \
+           patch("jules_agent.cli.advance_core.find_source_name", return_value="test_source"):
+        handle_next(args, sequential_state, mock_client, Path("/tmp"), Config())
 
     task2 = sequential_state.runs[0].tasks[1]
     assert task2.status == "dispatched"
     assert task2.jules.session_id == "new_sess_id"
 
 def test_handle_next_invalid_run_id(sequential_state):
-    args = argparse.Namespace(run_id="invalid_run")
+    args = argparse.Namespace(run_id="invalid_run", automation_mode=None)
     mock_client = MagicMock()
     with pytest.raises(PipelineError, match="Run invalid_run not found"):
-        handle_next(args, sequential_state, mock_client, Path("/tmp"))
+        handle_next(args, sequential_state, mock_client, Path("/tmp"), Config())
 
 def test_handle_next_not_sequential(sequential_state):
     sequential_state.runs[0].strategy = "single_session"
-    args = argparse.Namespace(run_id="run1")
+    args = argparse.Namespace(run_id="run1", automation_mode=None)
     mock_client = MagicMock()
     with pytest.raises(PipelineError, match="is not an active sequential run"):
-        handle_next(args, sequential_state, mock_client, Path("/tmp"))
+        handle_next(args, sequential_state, mock_client, Path("/tmp"), Config())
