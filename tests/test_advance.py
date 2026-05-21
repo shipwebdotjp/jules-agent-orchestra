@@ -227,7 +227,7 @@ def test_handle_advance_dispatches_planned_fallback(mock_dispatch_task, mock_syn
     handle_advance(args, state, client, github_client, Path("/tmp"), config)
 
     mock_dispatch_task.assert_called_once()
-    assert mock_dispatch_task.call_args[0][0].id == "2"
+    assert mock_dispatch_task.call_args.kwargs["task"].id == "2"
 
 
 @patch("jules_agent.cli.commands.advance.handle_sync")
@@ -287,7 +287,7 @@ def test_handle_advance_dispatches_next_after_merge(
 
     mock_attempt_merge.assert_called_once()
     mock_dispatch_task.assert_called_once()
-    assert mock_dispatch_task.call_args[0][0].id == "2"
+    assert mock_dispatch_task.call_args.kwargs["task"].id == "2"
     mock_save.assert_called_once()
 
 

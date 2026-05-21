@@ -17,6 +17,10 @@ class PipelineError(RuntimeError):
     pass
 
 
+class SelectionCancelled(Exception):
+    pass
+
+
 def debug_command(args: list[str], cwd: Path, *, label: str | None = None) -> None:
     prefix = "DEBUG" if label is None else f"DEBUG[{label}]"
     print(

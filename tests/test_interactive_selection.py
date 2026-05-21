@@ -8,6 +8,7 @@ from jules_agent.models import State, ProjectState, Run, Task, JulesSessionInfo,
 from jules_agent.cli import build_parser
 from jules_agent.cli.state import get_candidates
 from jules_agent.cli.io import select_task_interactively
+from jules_agent.codex import SelectionCancelled
 
 @pytest.fixture
 def sample_state():
@@ -71,6 +72,24 @@ def test_select_task_interactively_success(mock_isatty, sample_state):
     # Test selecting 2
     run, task = select_task_interactively(candidates, "approve", input_func=lambda _: "2")
     assert task.id == "task2"
+
+@patch("sys.stdin.isatty", return_value=True)
+def test_select_task_interactively_cancel(mock_isatty, sample_state):
+    run1 = sample_state.runs[0]
+    task1 = run1.tasks[0]
+    candidates = [(run1, task1)]
+
+    def mock_input_cancel(_):
+        raise EOFError()
+
+    with pytest.raises(SelectionCancelled):
+        select_task_interactively(candidates, "approve", input_func=mock_input_cancel)
+
+    def mock_input_interrupt(_):
+        raise KeyboardInterrupt()
+
+    with pytest.raises(SelectionCancelled):
+        select_task_interactively(candidates, "approve", input_func=mock_input_interrupt)
 
 @patch("sys.stdin.isatty", return_value=False)
 def test_select_task_interactively_non_tty(mock_isatty, sample_state):

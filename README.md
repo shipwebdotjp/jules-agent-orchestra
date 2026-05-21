@@ -42,7 +42,9 @@ jules-agent [flags] <command> [args]
   - In interactive mode, it may first ask clarification questions before generating a plan.
   - `--no-confirm`: Skip the confirmation loop and dispatch immediately.
   - `--auto-plan-approval`: Automatically approve the task plan (forces `requirePlanApproval=false`).
-  - `--automation-mode <mode>`: Specify the automation mode for the Jules session (defaults to `AUTO_CREATE_PR`).
+  - `--automation-mode <mode>`: Specify the automation mode for the Jules session.
+    - `AUTO_CREATE_PR` (default): Whenever a final code patch is generated in the session, automatically create a branch and a pull request for it.
+    - `AUTOMATION_MODE_UNSPECIFIED`: The automation mode is unspecified. Default to no automation.
 - `status`: Show the current local state, including runs and tasks. By default, it only shows runs with `planned` or `running` status.
   - `-a`, `--all`: Show all runs, including completed, failed, and cancelled.
   - `--show-activities`: Show detailed session activities for each task.
@@ -55,6 +57,7 @@ jules-agent [flags] <command> [args]
 - `review [task_id]`: Manually run Codex review for a task with an open pull request. If `task_id` is omitted, it shows a list of tasks with open pull requests.
 - `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it shows a list of tasks with open pull requests.
 - `next [run_id]`: Dispatch the next task in a sequential run. If `run_id` is omitted, it shows a list of active sequential runs with planned tasks.
+  - `--automation-mode <mode>`: Specify the automation mode for the Jules session (e.g., `AUTO_CREATE_PR` or `AUTOMATION_MODE_UNSPECIFIED`).
 
 ### Global Flags
 

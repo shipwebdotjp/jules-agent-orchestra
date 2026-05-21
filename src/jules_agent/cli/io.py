@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from ..models import ExecutionPlan
 from ..pipeline import format_subtask_for_jules
-from ..codex import ClarificationQuestion, PipelineError
+from ..codex import ClarificationQuestion, PipelineError, SelectionCancelled
 
 if TYPE_CHECKING:
     from ..models import Run, Task
@@ -107,8 +107,8 @@ def select_task_interactively(
     while True:
         try:
             choice = input_func(f"Select task (1-{len(candidates)}): ").strip()
-        except EOFError as exc:
-            raise PipelineError("Selection cancelled.") from exc
+        except (EOFError, KeyboardInterrupt):
+            raise SelectionCancelled()
 
         if not choice:
             continue

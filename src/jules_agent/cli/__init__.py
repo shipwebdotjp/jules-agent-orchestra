@@ -44,7 +44,7 @@ from ..models import (
 from ..pipeline import (
     suggest_reply,
 )
-from ..codex import PipelineError
+from ..codex import PipelineError, SelectionCancelled
 from ..git import get_git_remote_repo, get_git_root
 from ..persistence import load_state
 
@@ -338,6 +338,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "next":
             return handle_next(args, state, client, cwd, config)
 
+    except SelectionCancelled:
+        return 0
     except PipelineError as exc:
         parser.exit(1, f"{exc}\n")
 
