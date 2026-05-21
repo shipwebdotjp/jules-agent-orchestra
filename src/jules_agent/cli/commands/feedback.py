@@ -11,7 +11,7 @@ from ...models import State, Task
 from ...pipeline import (
     suggest_reply,
 )
-from ...codex import PipelineError, resolve_tool_for_phase
+from ...codex import PipelineError, display_tool_name, resolve_tool_for_phase
 from ...git import CommandRunner, run_command
 from ...persistence import save_state
 from ..io import select_task_interactively
@@ -38,6 +38,7 @@ def run_feedback_loop(
     if not task.jules:
         raise PipelineError("Task has no Jules session info.")
 
+    tool_label = display_tool_name(tool_name)
     feedback_history: list[str] = []
     first_iteration = True
 
@@ -52,7 +53,7 @@ def run_feedback_loop(
         is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
 
         if interactive:
-            output("\nFetching suggestion from Codex...")
+            output(f"\nFetching suggestion from {tool_label}...")
         try:
             activities = list(client.list_activities(task.jules.session_name))
             result = suggest_reply(
@@ -99,14 +100,16 @@ def run_feedback_loop(
                         return "completed"
 
                     if interactive:
-                        output("Auto-approving plan as recommended by Codex...")
+                        output(f"Auto-approving plan as recommended by {tool_label}...")
                     client.approve_plan(task.jules.session_name)
                     task.status = "plan_approved"
                     mark_advanced("approve_plan")
                     return "completed"
                 else:
                     if interactive:
-                        output("Codex does not recommend auto-approval. Falling back to interactive mode.")
+                        output(
+                            f"{tool_label} does not recommend auto-approval. Falling back to interactive mode."
+                        )
             elif not is_awaiting_plan_approval and auto_feedback:
                 if last_activity_id == activity_id and last_feedback_hash == suggestion_hash:
                     if interactive:

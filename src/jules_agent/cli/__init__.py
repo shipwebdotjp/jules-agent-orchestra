@@ -71,7 +71,7 @@ __all__ = [
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="jules-agent",
-        description="Analyze a task with Codex and dispatch it to Jules.",
+        description="Analyze a task and dispatch it to Jules.",
     )
     parser.add_argument(
         "--repo",
@@ -166,7 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
         "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
     )
 
-    review_parser = subparsers.add_parser("review", help="Manually run Codex review for a task")
+    review_parser = subparsers.add_parser("review", help="Manually run a review for a task")
     review_parser.add_argument(
         "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
     )

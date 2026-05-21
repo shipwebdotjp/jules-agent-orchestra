@@ -17,6 +17,21 @@ class PipelineError(RuntimeError):
     pass
 
 
+def display_tool_name(tool_name: str | None) -> str:
+    if not tool_name:
+        return "Tool"
+
+    mapping = {
+        "codex": "Codex",
+        "claude": "Claude",
+        "gemini": "Gemini",
+        "opencode": "OpenCode",
+        "copilot": "Copilot",
+        "cline": "Cline",
+    }
+    return mapping.get(tool_name.lower(), tool_name)
+
+
 class SelectionCancelled(Exception):
     pass
 
@@ -301,7 +316,7 @@ class ClarificationPrompt:
 def parse_json_document(text: str) -> object:
     stripped = text.strip()
     if not stripped:
-        raise PipelineError("Codex returned an empty response.")
+        raise PipelineError("The tool returned an empty response.")
 
     if stripped.startswith("```"):
         stripped = re.sub(
@@ -320,7 +335,7 @@ def parse_json_document(text: str) -> object:
             except json.JSONDecodeError:
                 continue
             return payload
-    raise PipelineError("Could not parse JSON from Codex output.")
+    raise PipelineError("Could not parse JSON from the tool output.")
 
 
 def call_backend(

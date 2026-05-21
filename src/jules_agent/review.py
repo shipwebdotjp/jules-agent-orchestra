@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .codex import call_backend, PipelineError
+from .codex import display_tool_name
 from .git import CommandRunner, run_command
 from .github import GitHubClient
 from .models import State, Task, TaskReview, TaskReviewAttempt
@@ -66,6 +67,7 @@ def format_review_sticky_comment(
     summary: str,
     next_steps: str,
     findings: list[dict[str, Any]] | None = None,
+    tool_label: str = "Review",
 ) -> str:
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -80,7 +82,7 @@ def format_review_sticky_comment(
         status_text = "Passed" if status == "pass" else "Changes Requested"
 
     lines = [
-        f"## Codex Review Results {emoji}",
+        f"## {tool_label} Review Results {emoji}",
         f"- **Status**: {status_text}",
         f"- **Attempt**: {attempt} / {task.max_attempts}",
         f"- **Head SHA**: `{head_sha}`",
@@ -248,6 +250,7 @@ def run_codex_review(
     gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
+    tool_label = display_tool_name(tool_name)
     payload = call_backend(
         prompt,
         codex_review_schema(),
@@ -259,6 +262,6 @@ def run_codex_review(
     )
 
     if not isinstance(payload, dict):
-        raise PipelineError("Codex review failed: payload is not a dictionary.")
+        raise PipelineError(f"{tool_label} review failed: payload is not a dictionary.")
 
     return payload

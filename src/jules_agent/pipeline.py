@@ -11,6 +11,7 @@ from .codex import (
     ClarificationQuestion,
     PipelineError,
     call_backend,
+    display_tool_name,
 )
 from .git import (
     CommandRunner,
@@ -117,7 +118,7 @@ def clarification_schema() -> dict[str, object]:
     }
 
 
-def normalize_subtasks(payload: object) -> list[Subtask]:
+def normalize_subtasks(payload: object, tool_label: str = "Tool") -> list[Subtask]:
     print(        f" subtasks output: {json.dumps(payload, indent=2)}")
 
     if isinstance(payload, dict):
@@ -125,31 +126,34 @@ def normalize_subtasks(payload: object) -> list[Subtask]:
         if raw_items is None:
             raw_items = payload.get("subtasks")
         if raw_items is None:
-            raise PipelineError("Codex output did not include a 'tasks' field.")
+            raise PipelineError(f"{tool_label} output did not include a 'tasks' field.")
     elif isinstance(payload, list):
         raw_items = payload
     else:
-        raise PipelineError("Codex output must be a JSON object or array.")
+        raise PipelineError(f"{tool_label} output must be a JSON object or array.")
 
-    return _normalize_tasks(raw_items)
+    return _normalize_tasks(raw_items, tool_label=tool_label)
 
 
-def normalize_clarification(payload: object) -> ClarificationPrompt:
+def normalize_clarification(
+    payload: object,
+    tool_label: str = "Tool",
+) -> ClarificationPrompt:
     print(        f" clarification output: {json.dumps(payload, indent=2)}")
     if not isinstance(payload, dict):
-        raise PipelineError("Codex output must be a JSON object.")
+        raise PipelineError(f"{tool_label} output must be a JSON object.")
 
     raw_has_questions = payload.get("has_questions")
     if not isinstance(raw_has_questions, bool):
         raise PipelineError(
-            "Codex output did not include a valid 'has_questions' field."
+            f"{tool_label} output did not include a valid 'has_questions' field."
         )
 
     raw_questions = payload.get("questions")
     if raw_questions is None:
-        raise PipelineError("Codex output did not include a 'questions' field.")
+        raise PipelineError(f"{tool_label} output did not include a 'questions' field.")
     if not isinstance(raw_questions, list):
-        raise PipelineError("Codex output field 'questions' must be an array.")
+        raise PipelineError(f"{tool_label} output field 'questions' must be an array.")
 
     questions: list[ClarificationQuestion] = []
     for index, item in enumerate(raw_questions, start=1):
@@ -183,45 +187,45 @@ def normalize_clarification(payload: object) -> ClarificationPrompt:
 
     if raw_has_questions and not questions:
         raise PipelineError(
-            "Codex reported that clarification is needed, but returned no questions."
+            f"{tool_label} reported that clarification is needed, but returned no questions."
         )
     if not raw_has_questions and questions:
         raise PipelineError(
-            "Codex reported that no clarification is needed, but returned questions."
+            f"{tool_label} reported that no clarification is needed, but returned questions."
         )
 
     return ClarificationPrompt(has_questions=raw_has_questions, questions=questions)
 
 
-def normalize_plan(payload: object) -> ExecutionPlan:
+def normalize_plan(payload: object, tool_label: str = "Tool") -> ExecutionPlan:
     if not isinstance(payload, dict):
-        raise PipelineError("Codex output must be a JSON object.")
+        raise PipelineError(f"{tool_label} output must be a JSON object.")
 
     raw_strategy = payload.get("strategy")
     if not isinstance(raw_strategy, str) or not raw_strategy.strip():
-        raise PipelineError("Codex output did not include a valid 'strategy' field.")
+        raise PipelineError(f"{tool_label} output did not include a valid 'strategy' field.")
     strategy = raw_strategy.strip()
     if strategy not in SUPPORTED_STRATEGIES:
-        raise PipelineError(f"Codex returned unsupported strategy: {strategy}")
+        raise PipelineError(f"{tool_label} returned unsupported strategy: {strategy}")
 
     raw_items = payload.get("tasks")
     if raw_items is None:
         raw_items = payload.get("subtasks")
     if raw_items is None:
-        raise PipelineError("Codex output did not include a 'tasks' field.")
+        raise PipelineError(f"{tool_label} output did not include a 'tasks' field.")
 
-    tasks = _normalize_tasks(raw_items)
+    tasks = _normalize_tasks(raw_items, tool_label=tool_label)
     if strategy == "single_session" and len(tasks) != 1:
         raise PipelineError(
-            "Codex returned a single_session plan with more than one task."
+            f"{tool_label} returned a single_session plan with more than one task."
         )
 
     return ExecutionPlan(strategy=strategy, tasks=tasks)
 
 
-def _normalize_tasks(raw_items: object) -> list[Subtask]:
+def _normalize_tasks(raw_items: object, tool_label: str = "Tool") -> list[Subtask]:
     if not isinstance(raw_items, list):
-        raise PipelineError("Codex output field 'tasks' must be an array.")
+        raise PipelineError(f"{tool_label} output field 'tasks' must be an array.")
 
     tasks: list[Subtask] = []
     for index, item in enumerate(raw_items, start=1):
@@ -257,7 +261,7 @@ def _normalize_tasks(raw_items: object) -> list[Subtask]:
         )
 
     if not tasks:
-        raise PipelineError("Codex returned zero tasks.")
+        raise PipelineError(f"{tool_label} returned zero tasks.")
 
     return tasks
 
@@ -314,6 +318,7 @@ def identify_clarifications(
     gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> ClarificationPrompt:
+    tool_label = display_tool_name(tool_name)
     prompt = build_clarification_prompt(task, clarification_history)
     payload = call_backend(
         prompt,
@@ -324,7 +329,7 @@ def identify_clarifications(
         gemini_skip_trust=gemini_skip_trust,
         runner=runner,
     )
-    return normalize_clarification(payload)
+    return normalize_clarification(payload, tool_label=tool_label)
 
 
 def build_clarified_task_prompt(
@@ -357,6 +362,7 @@ def decompose_task(
     gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> ExecutionPlan:
+    tool_label = display_tool_name(tool_name)
     prompt = build_codex_prompt(task)
     payload = call_backend(
         prompt,
@@ -367,7 +373,7 @@ def decompose_task(
         gemini_skip_trust=gemini_skip_trust,
         runner=runner,
     )
-    return normalize_plan(payload)
+    return normalize_plan(payload, tool_label=tool_label)
 
 
 def format_subtask_for_jules(subtask: Subtask) -> str:
@@ -476,6 +482,7 @@ def suggest_reply(
     gemini_skip_trust: bool = False,
     runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
+    tool_label = display_tool_name(tool_name)
     activities_formatted = format_activities(activities)
     prompt = build_suggestion_prompt(
         task_description,
@@ -494,7 +501,7 @@ def suggest_reply(
     )
 
     if not isinstance(payload, dict):
-        raise PipelineError("Codex suggestion failed: payload is not a dictionary.")
+        raise PipelineError(f"{tool_label} suggestion failed: payload is not a dictionary.")
 
     suggestion = payload.get("suggestion")
     explanation = payload.get("explanation")
@@ -502,22 +509,22 @@ def suggest_reply(
     if is_awaiting_plan_approval:
         if "approval_recommended" not in payload:
             raise PipelineError(
-                "Codex suggestion failed: 'approval_recommended' field is missing."
+                f"{tool_label} suggestion failed: 'approval_recommended' field is missing."
             )
         approval_recommended = payload["approval_recommended"]
         if not isinstance(approval_recommended, bool):
             raise PipelineError(
-                "Codex suggestion failed: 'approval_recommended' must be a boolean."
+                f"{tool_label} suggestion failed: 'approval_recommended' must be a boolean."
             )
     else:
         approval_recommended = bool(payload.get("approval_recommended", False))
 
     if not isinstance(suggestion, str) or not suggestion.strip():
         raise PipelineError(
-            "Codex suggestion failed: 'suggestion' must be a non-empty string."
+            f"{tool_label} suggestion failed: 'suggestion' must be a non-empty string."
         )
     if not isinstance(explanation, str):
-        raise PipelineError("Codex suggestion failed: 'explanation' must be a string.")
+        raise PipelineError(f"{tool_label} suggestion failed: 'explanation' must be a string.")
 
     return {
         "suggestion": suggestion.strip(),
@@ -588,6 +595,8 @@ def perform_task_review(
     if not task.pull_request:
         raise PipelineError(f"Task {task.id} has no pull request associated.")
 
+    tool_label = display_tool_name(tool_name)
+
     # Lazy import to avoid circular dependency
     from .cli.state import extract_pull_request_number
     issue_number = extract_pull_request_number(task.pull_request.url)
@@ -649,12 +658,13 @@ def perform_task_review(
         status="in_progress",
         attempt=task.attempts + 1,
         head_sha=head_sha,
-        summary="Codex review is currently in progress...",
+        summary=f"{tool_label} review is currently in progress...",
         next_steps="Please wait for the review to complete.",
+        tool_label=tool_label,
     )
     update_sticky_comment(github_client, repo, issue_number, in_progress_body, task)
 
-    print(f"Calling Codex for review of task {task.id}...")
+    print(f"Calling {tool_label} for review of task {task.id}...")
     prev_status = task.status
     task.status = "codex_reviewing"
     save_state(cwd, state)
@@ -674,14 +684,15 @@ def perform_task_review(
             status="error",
             attempt=task.attempts + 1,
             head_sha=head_sha,
-            summary="Codex review failed",
+            summary=f"{tool_label} review failed",
             next_steps="See pipeline logs and retry or investigate.",
+            tool_label=tool_label,
         )
         update_sticky_comment(github_client, repo, issue_number, error_body, task)
         # Revert status on failure
         task.status = prev_status
         save_state(cwd, state)
-        raise PipelineError(f"Codex review failed: {e}") from e
+        raise PipelineError(f"{tool_label} review failed: {e}") from e
 
     print(f"Review completed for task {task.id}. Status: {result['status']}")
 
@@ -694,6 +705,7 @@ def perform_task_review(
         summary=result["summary"],
         next_steps=result["next_steps"],
         findings=result.get("findings"),
+        tool_label=tool_label,
     )
     update_sticky_comment(github_client, repo, issue_number, body, task)
 
