@@ -1,6 +1,7 @@
 from .advance import handle_advance
 from .approve import handle_approve
 from .feedback import handle_feedback, run_feedback_loop
+from .import_command import handle_import
 from .merge import handle_merge
 from .next import handle_next
 from .review import handle_review
@@ -13,6 +14,7 @@ __all__ = [
     "handle_advance",
     "handle_approve",
     "handle_feedback",
+    "handle_import",
     "handle_merge",
     "handle_next",
     "handle_run",

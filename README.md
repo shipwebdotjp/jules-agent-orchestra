@@ -40,6 +40,8 @@ jules-agent [flags] <command> [args]
 
 - `run [flags] <task>`: Analyze a new task with Codex and dispatch it to Jules.
   - In interactive mode, it may first ask clarification questions before generating a plan.
+- `import <session_id>`: Import an existing Jules session into the local state.
+  - Supports both bare IDs (e.g., `12345`) and full session names (e.g., `sessions/12345`).
   - `--no-confirm`: Skip the confirmation loop and dispatch immediately.
   - `--auto-plan-approval`: Automatically approve the task plan (forces `requirePlanApproval=false`).
   - `--automation-mode <mode>`: Specify the automation mode for the Jules session.

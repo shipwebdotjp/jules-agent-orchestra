@@ -8,6 +8,7 @@ from .commands import (
     handle_advance,
     handle_approve,
     handle_feedback,
+    handle_import,
     handle_merge,
     handle_next,
     handle_review,
@@ -114,6 +115,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Subcommands")
+
+    import_parser = subparsers.add_parser("import", help="Import an existing Jules session")
+    import_parser.add_argument("session_id", help="Jules session ID or name")
 
     run_parser = subparsers.add_parser("run", help="Run a new task")
     run_parser.add_argument("task", help="Task description")
@@ -316,6 +320,8 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "run":
             return handle_run(args, state, client, cwd, config)
+        elif args.command == "import":
+            return handle_import(args, state, client, cwd)
         elif args.command == "advance":
             return handle_advance(args, state, client, github_client, cwd, config)
         elif args.command == "cron":
