@@ -53,27 +53,36 @@ def handle_sync(
             run_updated = reopened_from_completed
 
             for task in run.tasks:
-                if task.status == "pr_created":
-                    if not skip_pr_sync:
-                        if github_client and sync_pr_created_task(
-                            github_client,
-                            state.project.repo,
-                            task,
-                        ):
-                            updated_count += 1
-                            run_updated = True
-                    continue
-
+                task_updated = False
                 if task.status not in (
                     "completed",
                     "merged",
                     "failed",
                     "cancelled",
                     "pr_closed",
+                    "pr_created",
+                    "waiting_human_review",
+                    "codex_reviewing",
+                    "needs_fix",
                 ):
                     if sync_task(client, task):
-                        updated_count += 1
-                        run_updated = True
+                        task_updated = True
+
+                if (
+                    task.status in ("pr_created", "waiting_human_review", "codex_reviewing", "needs_fix")
+                    and not skip_pr_sync
+                    and github_client
+                ):
+                    if sync_pr_created_task(
+                        github_client,
+                        state.project.repo,
+                        task,
+                    ):
+                        task_updated = True
+
+                if task_updated:
+                    updated_count += 1
+                    run_updated = True
 
             if run_updated:
                 run.status = get_run_sync_status(
