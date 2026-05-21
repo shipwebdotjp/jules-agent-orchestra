@@ -16,7 +16,15 @@ def handle_status(args: argparse.Namespace, state: State) -> int:
         print("No runs found.")
         return 0
 
-    for run in reversed(state.runs):
+    runs = state.runs
+    if not args.all:
+        runs = [r for r in runs if r.status in ("planned", "running")]
+
+    if not runs:
+        print("No planned or running runs found. Use --all to see all runs.")
+        return 0
+
+    for run in reversed(runs):
         normalized_run_title = _normalize_run_title(run.original_task)
         print(f"Run: {run.id} [{run.status}] - {normalized_run_title}")
         for task in run.tasks:

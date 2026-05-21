@@ -43,7 +43,9 @@ jules-agent [flags] <command> [args]
   - `--no-confirm`: Skip the confirmation loop and dispatch immediately.
   - `--auto-plan-approval`: Automatically approve the task plan (forces `requirePlanApproval=false`).
   - `--automation-mode <mode>`: Specify the automation mode for the Jules session (defaults to `AUTO_CREATE_PR`).
-- `status`: Show the current local state, including runs and tasks. Use `--show-activities` to see the session history.
+- `status`: Show the current local state, including runs and tasks. By default, it only shows runs with `planned` or `running` status.
+  - `-a`, `--all`: Show all runs, including completed, failed, and cancelled.
+  - `--show-activities`: Show detailed session activities for each task.
 - `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
 - `advance [flags]`: Automatically or interactively advance work across the next active task.
 - `cron [flags]`: Non-interactive background execution. This is a purely automated version of `advance` that never asks for input.
