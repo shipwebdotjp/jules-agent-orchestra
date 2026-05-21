@@ -130,6 +130,7 @@ def handle_run(
 ) -> int:
     tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", config, args)
     auto_plan_approval = args.auto_plan_approval or config.auto_plan_approval
+    automation_mode = args.automation_mode or config.automation_mode or "AUTO_CREATE_PR"
 
     if args.no_confirm:
         clarified_task = args.task
@@ -210,7 +211,7 @@ def handle_run(
                 starting_branch=starting_branch,
                 title=task.title,
                 require_plan_approval=not auto_plan_approval,
-                automation_mode="AUTO_CREATE_PR",
+                automation_mode=automation_mode,
             )
             task.jules = JulesSessionInfo(
                 session_id=session["id"],

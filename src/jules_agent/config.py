@@ -24,6 +24,7 @@ class Config:
     auto_feedback: bool = False
     auto_merge: bool = False
     auto: bool = False
+    automation_mode: str | None = None
 
 
     @classmethod
@@ -45,6 +46,7 @@ class Config:
             auto_feedback=data.get("auto_feedback", False),
             auto_merge=data.get("auto_merge", False),
             auto=data.get("auto", False),
+            automation_mode=data.get("automation_mode"),
         )
 
 
