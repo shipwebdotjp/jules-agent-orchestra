@@ -32,6 +32,13 @@ TaskStatus = Literal[
     "cancelled",
 ]
 
+PR_SYNC_STATUSES: set[TaskStatus] = {
+    "pr_created",
+    "waiting_human_review",
+    "codex_reviewing",
+    "needs_fix",
+}
+
 
 @dataclass(frozen=True)
 class Subtask:
