@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ...client import JulesClient
 from ...github import GitHubClient
-from ...models import State
+from ...models import PR_SYNC_STATUSES, State
 from ...persistence import save_state
 from ..state import (
     get_run_sync_status,
@@ -26,7 +26,7 @@ def handle_sync(
 ) -> int:
     updated_count = 0
     if not skip_pr_sync and github_client is None and any(
-        task.status == "pr_created"
+        task.status in PR_SYNC_STATUSES
         for run in state.runs
         for task in run.tasks
     ):
@@ -36,11 +36,11 @@ def handle_sync(
         )
 
     for run in state.runs:
-        has_pr_created_tasks = any(
-            task.status == "pr_created" for task in run.tasks
+        has_pr_sync_tasks = any(
+            task.status in PR_SYNC_STATUSES for task in run.tasks
         )
         should_sync_run = run.status in ("running", "planned", "failed")
-        if github_client and has_pr_created_tasks and run.status == "completed":
+        if github_client and has_pr_sync_tasks and run.status == "completed":
             should_sync_run = True
 
         if should_sync_run:
@@ -48,28 +48,28 @@ def handle_sync(
             reopened_from_completed = (
                 github_client is not None
                 and previous_status == "completed"
-                and has_pr_created_tasks
+                and has_pr_sync_tasks
             )
             run_updated = reopened_from_completed
 
             for task in run.tasks:
                 task_updated = False
-                if task.status not in (
-                    "completed",
-                    "merged",
-                    "failed",
-                    "cancelled",
-                    "pr_closed",
-                    "pr_created",
-                    "waiting_human_review",
-                    "codex_reviewing",
-                    "needs_fix",
+                if (
+                    task.status
+                    not in (
+                        "completed",
+                        "merged",
+                        "failed",
+                        "cancelled",
+                        "pr_closed",
+                    )
+                    and task.status not in PR_SYNC_STATUSES
                 ):
                     if sync_task(client, task):
                         task_updated = True
 
                 if (
-                    task.status in ("pr_created", "waiting_human_review", "codex_reviewing", "needs_fix")
+                    task.status in PR_SYNC_STATUSES
                     and not skip_pr_sync
                     and github_client
                 ):

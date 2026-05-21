@@ -7,7 +7,16 @@ from pathlib import Path
 
 from ..client import JulesClient
 from ..github import GitHubClient
-from ..models import PullRequestInfo, Run, RunStatus, State, Task, TaskStatus, gitPatchInfo
+from ..models import (
+    PR_SYNC_STATUSES,
+    PullRequestInfo,
+    Run,
+    RunStatus,
+    State,
+    Task,
+    TaskStatus,
+    gitPatchInfo,
+)
 from ..codex import PipelineError
 
 
@@ -177,6 +186,7 @@ def sync_task(client: JulesClient, task: Task) -> bool:
                     task.jules.code_changes = gitPatch_info
 
         new_status = get_jules_state_mapping(task.jules.state, has_pr)
+        updated = False
         if task.status != new_status:
             # Prevent status regression: if we are already in a post-PR state,
             # don't go back to pr_created even if Jules says COMPLETED.
@@ -192,7 +202,8 @@ def sync_task(client: JulesClient, task: Task) -> bool:
                     .isoformat()
                     .replace("+00:00", "Z")
                 )
-        return True
+                updated = True
+        return updated
     except Exception as e:
         print(f"Failed to sync task {task.id}: {e}", file=sys.stderr)
         return False
@@ -266,24 +277,21 @@ def sync_task_state(
     updated = False
     previous_run_status = run.status
 
-    if task.status not in (
-        "completed",
-        "merged",
-        "failed",
-        "cancelled",
-        "pr_closed",
-        "pr_created",
-        "waiting_human_review",
-        "codex_reviewing",
-        "needs_fix",
+    if (
+        task.status
+        not in (
+            "completed",
+            "merged",
+            "failed",
+            "cancelled",
+            "pr_closed",
+        )
+        and task.status not in PR_SYNC_STATUSES
     ):
         if sync_task(client, task):
             updated = True
 
-    if (
-        task.status in ("pr_created", "waiting_human_review", "codex_reviewing", "needs_fix")
-        and github_client
-    ):
+    if task.status in PR_SYNC_STATUSES and github_client:
         if sync_pr_created_task(github_client, state.project.repo, task):
             updated = True
 
