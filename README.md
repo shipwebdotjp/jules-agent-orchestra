@@ -38,8 +38,11 @@ jules-agent [flags] <command> [args]
 
 ### Subcommands
 
-- `run <task>`: Analyze a new task with Codex and dispatch it to Jules.
+- `run [flags] <task>`: Analyze a new task with Codex and dispatch it to Jules.
   - In interactive mode, it may first ask clarification questions before generating a plan.
+  - `--no-confirm`: Skip the confirmation loop and dispatch immediately.
+  - `--auto-plan-approval`: Automatically approve the task plan (forces `requirePlanApproval=false`).
+  - `--automation-mode <mode>`: Specify the automation mode for the Jules session (defaults to `AUTO_CREATE_PR`).
 - `status`: Show the current local state, including runs and tasks. Use `--show-activities` to see the session history.
 - `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
 - `advance [flags]`: Automatically or interactively advance work across the next active task.
@@ -94,10 +97,10 @@ jules-agent advance --auto
 5. A custom file specified via `--config`
 
 Settings in the configuration file have lower priority than environment variables and command-line flags. For automation flags, the priority is:
-1. Individual CLI flag (e.g., `--auto-merge`)
+1. Individual CLI flag (e.g., `--auto-merge`, `--automation-mode`)
 2. The `--auto` flag (sets approval and feedback to true)
 3. Configuration file settings
-4. Default values (auto_plan_approval=true, others=false)
+4. Default values (auto_plan_approval=true, others=false, automation_mode="AUTO_CREATE_PR")
 
 ### GitHub Token
 
@@ -123,6 +126,7 @@ feedback_tool = "opencode"
 review_tool = "copilot"
 base_url = "https://jules.googleapis.com/v1alpha"
 merge_method = "rebase"
+automation_mode = "AUTO_CREATE_PR"
 ```
 
 Example:

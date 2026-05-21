@@ -127,6 +127,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Automatically approve the task plan (forces requirePlanApproval=false).",
     )
+    run_parser.add_argument(
+        "--automation-mode",
+        help="Automation mode for the Jules session (e.g., AUTO_CREATE_PR).",
+    )
 
     status_parser = subparsers.add_parser("status", help="Show local state")
     status_parser.add_argument(

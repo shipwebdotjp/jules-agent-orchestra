@@ -1,38 +1,29 @@
 from __future__ import annotations
 
-import datetime
 import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
-from .client import JulesAPIError, JulesClient
+from .client import JulesClient
 from .codex import (
     ClarificationExchange,
     ClarificationPrompt,
     ClarificationQuestion,
     PipelineError,
     call_backend,
-    parse_json_document,
 )
 from .git import (
     CommandRunner,
-    get_git_branch,
-    get_git_remote_repo,
-    get_git_root,
-    is_git_repo,
     run_command,
 )
 from .github import GitHubClient
 from .models import (
-    DispatchResult,
     ExecutionPlan,
-    Run,
     State,
     Subtask,
     Task,
 )
-from .persistence import generate_run_id, load_state, save_state
+from .persistence import save_state
 from .review import (
     apply_review_result,
     format_review_sticky_comment,
@@ -583,112 +574,6 @@ def find_source_name(client: JulesClient, repo: str) -> str:
             return source["name"]
 
     raise PipelineError(f"Could not find source for repo: {repo}")
-
-
-def dispatch_subtasks(
-    subtasks: Sequence[Subtask],
-    *,
-    cwd: Path,
-    client: JulesClient,
-    repo: str | None = None,
-    strategy: str = "sequential_subtasks",
-    require_plan_approval: bool = True,
-) -> list[DispatchResult]:
-    if strategy == "single_session" and len(subtasks) != 1:
-        raise PipelineError("single_session plans must contain exactly one task.")
-
-    if repo is None:
-        repo_info = get_git_remote_repo(cwd)
-        if repo_info:
-            repo = f"{repo_info[0]}/{repo_info[1]}"
-
-    if repo is None:
-        raise PipelineError(
-            "Could not determine repository. Pass --repo owner/name or run in a git repo with an origin remote."
-        )
-
-    source_name = find_source_name(client, repo)
-    starting_branch = get_git_branch(cwd)
-
-    tasks_to_dispatch = subtasks
-    if strategy == "sequential_subtasks":
-        tasks_to_dispatch = subtasks[:1]
-
-    results: list[DispatchResult] = []
-    for index, subtask in enumerate(tasks_to_dispatch, start=1):
-        prompt = format_subtask_for_jules(subtask)
-        try:
-            session = client.create_session(
-                prompt=prompt,
-                source_name=source_name,
-                starting_branch=starting_branch,
-                title=subtask.title,
-                require_plan_approval=require_plan_approval,
-            )
-            results.append(
-                DispatchResult(
-                    index=index,
-                    subtask=subtask,
-                    session_id=session.get("id"),
-                    url=session.get("url"),
-                    raw_output=json.dumps(session, indent=2),
-                    returncode=0,
-                )
-            )
-        except JulesAPIError as exc:
-            results.append(
-                DispatchResult(
-                    index=index,
-                    subtask=subtask,
-                    session_id=None,
-                    raw_output=exc.response_body or str(exc),
-                    returncode=1,
-                    error_message=f"Jules API failed on subtask {index}: {exc}",
-                )
-            )
-            break
-    return results
-
-
-@dataclass(frozen=True)
-class PipelineOutcome:
-    task: str
-    plan: ExecutionPlan
-    dispatches: list[DispatchResult]
-
-    @property
-    def subtasks(self) -> list[Subtask]:
-        return self.plan.tasks
-
-
-def run_pipeline(
-    task: str,
-    *,
-    cwd: Path,
-    client: JulesClient,
-    repo: str | None = None,
-    tool_name: str = "codex",
-    tool_bin: str | None = None,
-    gemini_skip_trust: bool = False,
-    runner: CommandRunner = run_command,
-) -> PipelineOutcome:
-    plan = decompose_task(
-        task,
-        cwd=cwd,
-        tool_name=tool_name,
-        tool_bin=tool_bin,
-        gemini_skip_trust=gemini_skip_trust,
-        runner=runner,
-    )
-    validate_plan(plan)
-    dispatches = dispatch_subtasks(
-        plan.tasks,
-        cwd=cwd,
-        client=client,
-        repo=repo,
-        strategy=plan.strategy,
-    )
-    return PipelineOutcome(task=task, plan=plan, dispatches=dispatches)
 
 
 def perform_task_review(
