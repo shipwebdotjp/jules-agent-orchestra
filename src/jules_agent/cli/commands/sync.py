@@ -36,6 +36,9 @@ def handle_sync(
         )
 
     for run in state.runs:
+        run_initial_status = run.status
+        task_status_changes: list[tuple[str, str, str]] = []
+
         has_pr_sync_tasks = any(
             task.status in PR_SYNC_STATUSES for task in run.tasks
         )
@@ -44,15 +47,15 @@ def handle_sync(
             should_sync_run = True
 
         if should_sync_run:
-            previous_status = run.status
             reopened_from_completed = (
                 github_client is not None
-                and previous_status == "completed"
+                and run_initial_status == "completed"
                 and has_pr_sync_tasks
             )
             run_updated = reopened_from_completed
 
             for task in run.tasks:
+                task_initial_status = task.status
                 task_updated = False
                 if (
                     task.status
@@ -80,14 +83,17 @@ def handle_sync(
                     ):
                         task_updated = True
 
-                if task_updated:
+                if task_updated and task.status != task_initial_status:
                     updated_count += 1
                     run_updated = True
+                    task_status_changes.append(
+                        (task.id, task_initial_status, task.status)
+                    )
 
             if run_updated:
                 run.status = get_run_sync_status(
                     run,
-                    previous_status=previous_status,
+                    previous_status=run_initial_status,
                     reopened_from_completed=reopened_from_completed,
                 )
                 run.updated_at = (
@@ -96,7 +102,17 @@ def handle_sync(
                     .replace("+00:00", "Z")
                 )
 
+        if not getattr(args, "json", False):
+            if run.status != run_initial_status or task_status_changes:
+                if run.status != run_initial_status:
+                    print(f"Run {run.id}: {run_initial_status} -> {run.status}")
+                else:
+                    print(f"Run {run.id}: (no change)")
+
+                for task_id, old_s, new_s in task_status_changes:
+                    print(f"  Task {task_id}: {old_s} -> {new_s}")
+
     save_state(cwd, state)
-    if not getattr(args, "json", False):
+    if not getattr(args, "json", False) and updated_count > 0:
         print(f"Synced {updated_count} tasks.")
     return 0

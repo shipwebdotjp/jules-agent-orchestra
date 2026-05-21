@@ -92,7 +92,6 @@ def sync_pr_created_task(
         return False
 
     state = pull_request.get("state")
-    print(f"DEBUG: Task {task.id} (PR #{pull_number}) - GitHub state: {state!r}, merged_at: {pull_request.get('merged_at')!r}")
     if state == "open":
         return False
 
