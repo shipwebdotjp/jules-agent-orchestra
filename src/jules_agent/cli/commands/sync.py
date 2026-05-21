@@ -83,7 +83,7 @@ def handle_sync(
                     ):
                         task_updated = True
 
-                if task_updated:
+                if task_updated and task.status != task_initial_status:
                     updated_count += 1
                     run_updated = True
                     task_status_changes.append(
@@ -113,6 +113,6 @@ def handle_sync(
                     print(f"  Task {task_id}: {old_s} -> {new_s}")
 
     save_state(cwd, state)
-    if not getattr(args, "json", False):
+    if not getattr(args, "json", False) and updated_count > 0:
         print(f"Synced {updated_count} tasks.")
     return 0

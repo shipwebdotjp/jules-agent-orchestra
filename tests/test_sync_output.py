@@ -111,9 +111,7 @@ def test_handle_sync_no_output_on_no_change(capsys):
             sync_mod.save_state = original_save
 
     captured = capsys.readouterr()
-    assert "Run run-1" not in captured.out
-    assert "Task TASK-1" not in captured.out
-    assert "Synced 0 tasks." in captured.out
+    assert captured.out == ""
 
 def test_handle_sync_json_no_output(capsys):
     # Setup state
