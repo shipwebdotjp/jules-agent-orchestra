@@ -35,10 +35,14 @@ def handle_import(
         return 1
 
     # Repository validation
-    session_repo = ""
     source_context = session.get("sourceContext", {})
     github_context = source_context.get("githubRepoContext", {})
     source_name = source_context.get("source", "")
+    session_repo = ""
+    owner = github_context.get("owner")
+    repo = github_context.get("repo")
+    if owner and repo:
+        session_repo = f"{owner}/{repo}"
 
     # Try to extract repo from source name if it looks like projects/.../sources/...
     # but the API typically returns a source name we can use list_sources on.
@@ -46,8 +50,8 @@ def handle_import(
     # The requirement says "local state's repo and Jules session's repo".
 
     # Let's try to find the repo by listing sources and matching the source name
+    found_repo = None
     try:
-        found_repo = None
         for source in client.list_sources():
             if source.get("name") == source_name:
                 gh_repo = source.get("githubRepo", {})
@@ -57,20 +61,24 @@ def handle_import(
                     found_repo = f"{owner}/{name}"
                 break
 
-        if found_repo and found_repo != state.project.repo:
-            print(
-                f"Warning: Session repository ({found_repo}) does not match "
-                f"local repository ({state.project.repo}).",
-                file=sys.stderr,
-            )
-            print(
-                "Note: Subsequent sync/review/merge commands may not work correctly "
-                "if they depend on the local repository state.",
-                file=sys.stderr,
-            )
-    except Exception:
-        # Ignore errors during repo validation
-        pass
+    except Exception as exc:
+        print(
+            f"Error: Failed to validate session repository: {exc}",
+            file=sys.stderr,
+        )
+
+    chosen_repo = found_repo or session_repo
+    if chosen_repo and chosen_repo != state.project.repo:
+        print(
+            f"Warning: Session repository ({chosen_repo}) does not match "
+            f"local repository ({state.project.repo}).",
+            file=sys.stderr,
+        )
+        print(
+            "Note: Subsequent sync/review/merge commands may not work correctly "
+            "if they depend on the local repository state.",
+            file=sys.stderr,
+        )
 
     now_iso = (
         datetime.datetime.now(datetime.timezone.utc)
