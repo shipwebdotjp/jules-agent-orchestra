@@ -88,14 +88,23 @@ def handle_merge(
 
         if getattr(args, "pull", False):
             print(f"Switching to {base_branch} and pulling latest changes...")
-            run_command(["git", "checkout", base_branch], cwd=cwd)
-            run_command(["git", "pull"], cwd=cwd)
+            res = run_command(["git", "checkout", base_branch], cwd=cwd)
+            if res.returncode != 0:
+                print(f"Error: Failed to checkout {base_branch}: {res.stderr.strip()}")
+                return 0
+            res = run_command(["git", "pull"], cwd=cwd)
+            if res.returncode != 0:
+                print(f"Error: Failed to pull latest changes: {res.stderr.strip()}")
+                return 0
             current_branch = base_branch
 
         if getattr(args, "delete_branch", False):
             if current_branch == head_branch:
                 print(f"Switching to {base_branch} before deleting {head_branch}...")
-                run_command(["git", "checkout", base_branch], cwd=cwd)
+                res = run_command(["git", "checkout", base_branch], cwd=cwd)
+                if res.returncode != 0:
+                    print(f"Error: Failed to checkout {base_branch} before deletion: {res.stderr.strip()}")
+                    return 0
                 current_branch = base_branch
 
             print(f"Deleting local branch {head_branch}...")
@@ -106,7 +115,7 @@ def handle_merge(
                 print(f"Warning: Failed to delete local branch {head_branch}: {res.stderr.strip()}")
 
             # Remote deletion
-            head_repo = pr_details.get("head", {}).get("repo", {}).get("full_name")
+            head_repo = (pr_details.get("head", {}).get("repo") or {}).get("full_name")
             if head_repo == repo:
                 print(f"Deleting remote branch {head_branch}...")
                 res = run_command(["git", "push", "origin", "--delete", head_branch], cwd=cwd)
