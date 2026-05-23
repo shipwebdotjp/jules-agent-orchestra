@@ -180,6 +180,16 @@ def build_parser() -> argparse.ArgumentParser:
     merge_parser.add_argument(
         "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
     )
+    merge_parser.add_argument(
+        "--delete-branch",
+        action="store_true",
+        help="Delete the local and remote source branch after a successful merge.",
+    )
+    merge_parser.add_argument(
+        "--pull",
+        action="store_true",
+        help="Run git pull after switching to the target branch after merge.",
+    )
     merge_group = merge_parser.add_mutually_exclusive_group()
     merge_group.add_argument(
         "--merge",

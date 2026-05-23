@@ -9,6 +9,7 @@ from ...config import Config
 from ...github import GitHubClient
 from ...models import State
 from ...persistence import save_state
+from ...git import run_command, get_git_branch
 from ..io import select_task_interactively
 from ..state import get_candidates, resolve_task, extract_pull_request_number, sync_task_state
 
@@ -73,4 +74,54 @@ def handle_merge(
     )
     save_state(cwd, state)
     print("Successfully merged and updated state.")
+
+    # Post-merge cleanup
+    if getattr(args, "delete_branch", False) or getattr(args, "pull", False):
+        head_branch = pr_details.get("head", {}).get("ref")
+        base_branch = pr_details.get("base", {}).get("ref")
+
+        if not head_branch or not base_branch:
+            print("Warning: Could not determine branches for post-merge cleanup.")
+            return 0
+
+        current_branch = get_git_branch(cwd)
+
+        if getattr(args, "pull", False):
+            print(f"Switching to {base_branch} and pulling latest changes...")
+            res = run_command(["git", "checkout", base_branch], cwd=cwd)
+            if res.returncode != 0:
+                print(f"Error: Failed to checkout {base_branch}: {res.stderr.strip()}")
+                return 0
+            res = run_command(["git", "pull"], cwd=cwd)
+            if res.returncode != 0:
+                print(f"Error: Failed to pull latest changes: {res.stderr.strip()}")
+                return 0
+            current_branch = base_branch
+
+        if getattr(args, "delete_branch", False):
+            if current_branch == head_branch:
+                print(f"Switching to {base_branch} before deleting {head_branch}...")
+                res = run_command(["git", "checkout", base_branch], cwd=cwd)
+                if res.returncode != 0:
+                    print(f"Error: Failed to checkout {base_branch} before deletion: {res.stderr.strip()}")
+                    return 0
+                current_branch = base_branch
+
+            print(f"Deleting local branch {head_branch}...")
+            # Use -d first, as it should be merged. Fallback to -D if requested or necessary?
+            # Existing CLI style is minimal, so we stick to -d.
+            res = run_command(["git", "branch", "-d", head_branch], cwd=cwd)
+            if res.returncode != 0:
+                print(f"Warning: Failed to delete local branch {head_branch}: {res.stderr.strip()}")
+
+            # Remote deletion
+            head_repo = (pr_details.get("head", {}).get("repo") or {}).get("full_name")
+            if head_repo == repo:
+                print(f"Deleting remote branch {head_branch}...")
+                res = run_command(["git", "push", "origin", "--delete", head_branch], cwd=cwd)
+                if res.returncode != 0:
+                    print(f"Warning: Failed to delete remote branch {head_branch}: {res.stderr.strip()}")
+            else:
+                print(f"Skipping remote branch deletion for cross-repo PR (head: {head_repo})")
+
     return 0
