@@ -10,7 +10,7 @@ from ..pipeline import format_subtask_for_jules
 from ..codex import ClarificationQuestion, PipelineError, SelectionCancelled
 
 if TYPE_CHECKING:
-    from ..models import Run, Task
+    from ..models import Run, Task, State
 
 
 def build_review_prompt(task: str, feedback_history: list[str]) -> str:
@@ -118,6 +118,44 @@ def select_task_interactively(
             if 1 <= idx <= len(candidates):
                 return candidates[idx - 1]
             output(f"Invalid selection. Please enter a number between 1 and {len(candidates)}.")
+        except ValueError:
+            output("Invalid input. Please enter a number.")
+
+
+def select_run_interactively(
+    state: State,
+    *,
+    input_func=input,
+    output=print,
+) -> Run:
+    if not sys.stdin.isatty():
+        raise PipelineError(
+            "Error: run_id is required when stdin is not interactive. Please pass RUN_ID explicitly."
+        )
+
+    if not state.runs:
+        raise PipelineError("No runs found in local state.")
+
+    output("Select a run to delete:")
+    # Show runs in reverse chronological order (newest first)
+    sorted_runs = sorted(state.runs, key=lambda r: r.updated_at, reverse=True)
+    for i, run in enumerate(sorted_runs, start=1):
+        output(f"  {i}. {run.id} [{run.status}] {run.original_task[:50]}")
+
+    while True:
+        try:
+            choice = input_func(f"Select run (1-{len(sorted_runs)}): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            raise SelectionCancelled()
+
+        if not choice:
+            continue
+
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(sorted_runs):
+                return sorted_runs[idx - 1]
+            output(f"Invalid selection. Please enter a number between 1 and {len(sorted_runs)}.")
         except ValueError:
             output("Invalid input. Please enter a number.")
 

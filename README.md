@@ -92,6 +92,12 @@ The common flow is:
 - `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it shows a list of tasks with open pull requests.
 - `next [run_id]`: Dispatch the next task in a sequential run. If `run_id` is omitted, it shows a list of active sequential runs with planned tasks.
   - `--automation-mode <mode>`: Specify the automation mode for the Jules session (e.g., `AUTO_CREATE_PR` or `AUTOMATION_MODE_UNSPECIFIED`).
+- `delete run [run_id]`: Delete a run and its tasks from the local state.
+- `delete task [task_id]`: Delete a specific task from the local state. If the run becomes empty, it is also removed.
+- `rm`: An alias for `delete`.
+  - Omitting `run_id` or `task_id` triggers an interactive selection prompt.
+  - `--dry-run`: Show what would be deleted without making changes.
+  - `--yes`, `-y`: Skip confirmation prompts and proceed immediately.
 
 ### Global Flags
 

@@ -231,6 +231,8 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
                     "pr_created",
                     "waiting_human_review",
                 )
+            elif command == "delete task":
+                eligible = True
             elif command == "next":
                 # For 'next', we want the first 'planned' task of a running sequential run.
                 # Since get_candidates iterates over all tasks, we need to be careful.

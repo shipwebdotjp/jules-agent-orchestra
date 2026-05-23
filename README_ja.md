@@ -102,6 +102,12 @@ jules-agent [flags] <command> [args]
 - `next [run_id]`: sequential run の次の task を送信する
   - `run_id` を省略すると、`planned` task を持つ active な sequential run 一覧を表示する
   - `--automation-mode <mode>`: Jules セッションの automation mode を指定する（例: `AUTO_CREATE_PR` または `AUTOMATION_MODE_UNSPECIFIED`）
+- `delete run [run_id]`: 指定した run とその配下の task をローカル state から削除する
+- `delete task [task_id]`: 指定した task をローカル state から削除する。run が空になった場合は run も削除される
+- `rm`: `delete` の別名
+  - `run_id` や `task_id` を省略した場合は、候補の一覧から選択する対話的プロンプトが表示されます。
+  - `--dry-run`: 実際に削除は行わず、削除対象の確認だけを行います。
+  - `--yes`, `-y`: 確認プロンプトをスキップして即座に削除を実行します。
 
 ### グローバルフラグ
 
