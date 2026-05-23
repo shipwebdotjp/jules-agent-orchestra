@@ -22,6 +22,7 @@ from .state import (
     sync_task,
     extract_pull_request_number,
     get_jules_state_mapping,
+    sync_task_state,
 )
 from ..codex import resolve_tool_for_phase
 
@@ -218,7 +219,13 @@ class AdvanceEngine:
                     exit_code = 2
 
             elif target_task.status in ("pr_created", "waiting_human_review"):
-                if auto_merge:
+                # Sync before attempting merge to ensure we have latest PR state
+                sync_task_state(self.client, self.github_client, self.state, target_run, target_task, self.cwd)
+
+                if target_task.status == "merged":
+                    action_taken = True
+                    action_name = "already_merged"
+                elif auto_merge:
                     merge_result = self._attempt_merge(target_task)
                     if merge_result is True:
                         action_taken = True

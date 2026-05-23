@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import re
 import sys
 from pathlib import Path
 
@@ -17,9 +18,21 @@ def handle_import(
     client: JulesClient,
     cwd: Path,
 ) -> int:
-    session_id = args.session_id
-    if not session_id.startswith("sessions/"):
-        session_id = f"sessions/{session_id}"
+    raw_input = args.session_id
+
+    # Extract session ID from various formats:
+    # - https://jules.google.com/session/12345
+    # - session/12345
+    # - 12345
+    # - sessions/12345 (canonical internal)
+    match = re.search(r"(?:sessions?/|/session/)?(\d+)/?$", raw_input)
+    if match:
+        session_id = f"sessions/{match.group(1)}"
+    else:
+        # Fallback to original logic if no digits found or unusual format
+        session_id = raw_input
+        if not session_id.startswith("sessions/"):
+            session_id = f"sessions/{session_id}"
 
     # Deduplication check
     for run in state.runs:
