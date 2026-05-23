@@ -94,3 +94,30 @@ def test_sync_task_prevents_regression():
 
     # Should NOT go back to "pr_created"
     assert task.status == "waiting_human_review"
+
+
+def test_sync_task_returns_success_when_status_does_not_change():
+    from jules_agent.cli.state import sync_task
+
+    task = Task(
+        id="TASK-1",
+        title="Test Task",
+        status="awaiting_user_feedback",
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        jules=JulesSessionInfo(
+            session_id="sess-1",
+            session_name="sessions/1",
+            state="AWAITING_USER_FEEDBACK"
+        )
+    )
+
+    client = MagicMock()
+    client.get_session.return_value = {
+        "state": "AWAITING_USER_FEEDBACK",
+        "outputs": [],
+    }
+    client.list_activities.return_value = []
+
+    assert sync_task(client, task) is True
+    assert task.status == "awaiting_user_feedback"

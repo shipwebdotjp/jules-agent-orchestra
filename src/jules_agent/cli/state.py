@@ -185,7 +185,6 @@ def sync_task(client: JulesClient, task: Task) -> bool:
                     task.jules.code_changes = gitPatch_info
 
         new_status = get_jules_state_mapping(task.jules.state, has_pr)
-        updated = False
         if task.status != new_status:
             # Prevent status regression: if we are already in a post-PR state,
             # don't go back to pr_created even if Jules says COMPLETED.
@@ -201,8 +200,7 @@ def sync_task(client: JulesClient, task: Task) -> bool:
                     .isoformat()
                     .replace("+00:00", "Z")
                 )
-                updated = True
-        return updated
+        return True
     except Exception as e:
         print(f"Failed to sync task {task.id}: {e}", file=sys.stderr)
         return False
@@ -275,6 +273,7 @@ def sync_task_state(
 
     updated = False
     previous_run_status = run.status
+    task_initial_status = task.status
 
     if (
         task.status
@@ -287,12 +286,14 @@ def sync_task_state(
         )
         and task.status not in PR_SYNC_STATUSES
     ):
-        if sync_task(client, task):
-            updated = True
+        sync_task(client, task)
 
     if task.status in PR_SYNC_STATUSES and github_client:
         if sync_pr_created_task(github_client, state.project.repo, task):
             updated = True
+
+    if task.status != task_initial_status:
+        updated = True
 
     if updated:
         reopened_from_completed = previous_run_status == "completed"
