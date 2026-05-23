@@ -10,7 +10,7 @@ from ..pipeline import format_subtask_for_jules
 from ..codex import ClarificationQuestion, PipelineError, SelectionCancelled
 
 if TYPE_CHECKING:
-    from ..models import Run, Task
+    from ..models import Run, Task, State
 
 
 def build_review_prompt(task: str, feedback_history: list[str]) -> str:

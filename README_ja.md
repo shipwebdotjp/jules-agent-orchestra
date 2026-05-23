@@ -105,6 +105,9 @@ jules-agent [flags] <command> [args]
 - `delete run [run_id]`: 指定した run とその配下の task をローカル state から削除する
 - `delete task [task_id]`: 指定した task をローカル state から削除する。run が空になった場合は run も削除される
 - `rm`: `delete` の別名
+  - `run_id` や `task_id` を省略した場合は、候補の一覧から選択する対話的プロンプトが表示されます。
+  - `--dry-run`: 実際に削除は行わず、削除対象の確認だけを行います。
+  - `--yes`, `-y`: 確認プロンプトをスキップして即座に削除を実行します。
 
 ### グローバルフラグ
 
