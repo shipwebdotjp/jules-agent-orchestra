@@ -7,6 +7,7 @@ from pathlib import Path
 from .commands import (
     handle_advance,
     handle_approve,
+    handle_delete,
     handle_feedback,
     handle_import,
     handle_merge,
@@ -209,6 +210,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Automation mode for the Jules session (e.g., AUTO_CREATE_PR).",
     )
 
+    delete_parser = subparsers.add_parser("delete", aliases=["rm"], help="Delete a run or task from local state")
+    delete_parser.add_argument("--dry-run", action="store_true", help="Show what would be deleted without actually deleting")
+    delete_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
+
+    delete_subparsers = delete_parser.add_subparsers(dest="subcommand", required=True)
+
+    delete_run_parser = delete_subparsers.add_parser("run", help="Delete a run and all its tasks")
+    delete_run_parser.add_argument("run_id", nargs="?", help="Run ID to delete")
+
+    delete_task_parser = delete_subparsers.add_parser("task", help="Delete a specific task")
+    delete_task_parser.add_argument("task_id", nargs="?", help="Task ID to delete (RUN_ID:TASK_ID or TASK_ID)")
+
     advance_parser = subparsers.add_parser(
         "advance", help="Automatically or interactively advance work"
     )
@@ -343,6 +356,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_merge(args, state, client, github_client, cwd, config, parser)
         elif args.command == "next":
             return handle_next(args, state, client, cwd, config)
+        elif args.command in ("delete", "rm"):
+            return handle_delete(args, state, cwd)
 
     except SelectionCancelled:
         return 0
