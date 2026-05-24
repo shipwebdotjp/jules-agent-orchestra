@@ -182,13 +182,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     merge_parser.add_argument(
         "--delete-branch",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=None,
         help="Delete the local and remote source branch after a successful merge.",
     )
     merge_parser.add_argument(
         "--pull",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=None,
         help="Run git pull after switching to the target branch after merge.",
     )
