@@ -12,6 +12,7 @@ from ...persistence import save_state
 from ...git import run_command, get_git_branch
 from ..io import select_task_interactively
 from ..state import get_candidates, resolve_task, extract_pull_request_number, sync_task_state
+from .sync import handle_sync
 
 
 def handle_merge(
@@ -30,6 +31,8 @@ def handle_merge(
         run, task = resolve_task(state, args.task_id)
         task_id_for_print = args.task_id
     else:
+        # Perform full state sync before computing and showing merge candidates
+        handle_sync(args, state, client, github_client, cwd)
         candidates = get_candidates(state, "merge")
         run, task = select_task_interactively(candidates, "merge")
         task_id_for_print = f"{run.id}:{task.id}"
@@ -76,7 +79,16 @@ def handle_merge(
     print("Successfully merged and updated state.")
 
     # Post-merge cleanup
-    if getattr(args, "delete_branch", False) or getattr(args, "pull", False):
+    # Use flag from args if specified, otherwise fall back to config
+    delete_branch = getattr(args, "delete_branch", None)
+    if delete_branch is None:
+        delete_branch = config.merge_delete_branch
+
+    pull_after_merge = getattr(args, "pull", None)
+    if pull_after_merge is None:
+        pull_after_merge = config.merge_pull
+
+    if delete_branch or pull_after_merge:
         head_branch = pr_details.get("head", {}).get("ref")
         base_branch = pr_details.get("base", {}).get("ref")
 
@@ -86,7 +98,7 @@ def handle_merge(
 
         current_branch = get_git_branch(cwd)
 
-        if getattr(args, "pull", False):
+        if pull_after_merge:
             print(f"Switching to {base_branch} and pulling latest changes...")
             res = run_command(["git", "checkout", base_branch], cwd=cwd)
             if res.returncode != 0:
@@ -98,7 +110,7 @@ def handle_merge(
                 return 0
             current_branch = base_branch
 
-        if getattr(args, "delete_branch", False):
+        if delete_branch:
             if current_branch == head_branch:
                 print(f"Switching to {base_branch} before deleting {head_branch}...")
                 res = run_command(["git", "checkout", base_branch], cwd=cwd)

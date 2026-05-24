@@ -20,6 +20,8 @@ class Config:
     review_tool: str | None = None
     base_url: str = "https://jules.googleapis.com/v1alpha"
     merge_method: str = "merge"
+    merge_delete_branch: bool = False
+    merge_pull: bool = False
     auto_plan_approval: bool = True
     auto_feedback: bool = False
     auto_merge: bool = False
@@ -42,6 +44,8 @@ class Config:
             review_tool=data.get("review_tool"),
             base_url=data.get("base_url", "https://jules.googleapis.com/v1alpha"),
             merge_method=data.get("merge_method", "merge"),
+            merge_delete_branch=data.get("merge_delete_branch", False),
+            merge_pull=data.get("merge_pull", False),
             auto_plan_approval=data.get("auto_plan_approval", True),
             auto_feedback=data.get("auto_feedback", False),
             auto_merge=data.get("auto_merge", False),
