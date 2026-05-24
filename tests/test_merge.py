@@ -110,3 +110,35 @@ def test_handle_merge_wrong_status(state, tmp_path):
         handle_merge(args, state, None, github_client, tmp_path, config, parser)
 
     assert "required to merge" in str(excinfo.value)
+
+@respx.mock
+def test_handle_merge_no_task_id_calls_sync(state, tmp_path, mocker):
+    args = argparse.Namespace(task_id=None, merge_method=None)
+    config = Config()
+    github_client = GitHubClient(token="test-token")
+
+    # Mock handle_sync
+    mock_sync = mocker.patch("jules_agent.cli.commands.merge.handle_sync")
+
+    # Mock select_task_interactively
+    mocker.patch("jules_agent.cli.commands.merge.select_task_interactively", return_value=(state.runs[0], state.runs[0].tasks[0]))
+
+    # Mock sync_task_state
+    mocker.patch("jules_agent.cli.commands.merge.sync_task_state")
+
+    # Mock github_client methods
+    repo = "owner/repo"
+    pull_number = 123
+    respx.get(f"https://api.github.com/repos/{repo}/pulls/{pull_number}").mock(
+        return_value=httpx.Response(200, json={"mergeable": True})
+    )
+    respx.put(f"https://api.github.com/repos/{repo}/pulls/{pull_number}/merge").mock(
+        return_value=httpx.Response(200, json={"merged": True})
+    )
+
+    parser = argparse.ArgumentParser()
+
+    result = handle_merge(args, state, None, github_client, tmp_path, config, parser)
+
+    assert result == 0
+    mock_sync.assert_called_once_with(args, state, None, github_client, tmp_path)

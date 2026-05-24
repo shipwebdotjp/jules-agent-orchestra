@@ -89,7 +89,7 @@ The common flow is:
 - `send [task_id] message`: Send a manual message to a task's Jules session. If `task_id` is omitted, it shows a list of active tasks. If your message contains spaces and you omit `task_id`, the message must be quoted (e.g., `jules-agent send "hello world"`).
 - `feedback [task_id]`: Enter an interactive feedback loop to refine a task's plan or reply. If `task_id` is omitted, it shows a list of eligible tasks.
 - `review [task_id]`: Run a review for a task with an open pull request. If `task_id` is omitted, it shows a list of tasks with open pull requests.
-- `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it shows a list of tasks with open pull requests.
+- `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it first performs a full state synchronization and then shows a list of tasks with open pull requests.
 - `next [run_id]`: Dispatch the next task in a sequential run. If `run_id` is omitted, it shows a list of active sequential runs with planned tasks.
   - `--automation-mode <mode>`: Specify the automation mode for the Jules session (e.g., `AUTO_CREATE_PR` or `AUTOMATION_MODE_UNSPECIFIED`).
 - `delete run [run_id]`: Delete a run and its tasks from the local state.
@@ -199,6 +199,8 @@ feedback_tool = "opencode"
 review_tool = "copilot"
 base_url = "https://jules.googleapis.com/v1alpha"
 merge_method = "rebase"
+merge_delete_branch = true
+merge_pull = true
 automation_mode = "AUTO_CREATE_PR"
 ```
 
