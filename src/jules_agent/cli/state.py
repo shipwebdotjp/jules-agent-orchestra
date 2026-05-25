@@ -230,6 +230,7 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
                 eligible = task.pull_request is not None and task.status in (
                     "pr_created",
                     "waiting_human_review",
+                    "needs_fix",
                 )
             elif command == "delete task":
                 eligible = True

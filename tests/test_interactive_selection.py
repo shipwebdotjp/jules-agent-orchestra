@@ -53,6 +53,34 @@ def test_get_candidates_review(sample_state):
     assert len(candidates) == 1
     assert candidates[0][1].id == "task2"
 
+def test_get_candidates_merge_includes_needs_fix():
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+    task = Task(
+        id="task3",
+        title="Task 3",
+        status="needs_fix",
+        created_at=now,
+        updated_at=now,
+        pull_request=PullRequestInfo(url="http://github.com/pull/2")
+    )
+    run = Run(
+        id="run2",
+        original_task="merge test",
+        strategy="single_session",
+        status="running",
+        created_at=now,
+        updated_at=now,
+        tasks=[task]
+    )
+    state = State(
+        project=ProjectState(root="/tmp", repo="owner/repo"),
+        runs=[run]
+    )
+
+    candidates = get_candidates(state, "merge")
+    assert len(candidates) == 1
+    assert candidates[0][1].id == "task3"
+
 def test_get_candidates_send(sample_state):
     candidates = get_candidates(sample_state, "send")
     assert len(candidates) == 1

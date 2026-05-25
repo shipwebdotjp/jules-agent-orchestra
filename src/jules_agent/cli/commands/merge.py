@@ -40,8 +40,8 @@ def handle_merge(
     # sync first
     sync_task_state(client, github_client, state, run, task, cwd)
 
-    if task.status not in ("pr_created", "waiting_human_review"):
-        parser.exit(1, f"Error: Task {task_id_for_print} is in status {task.status!r}, but 'pr_created' or 'waiting_human_review' is required to merge.\n")
+    if task.status not in ("pr_created", "waiting_human_review", "needs_fix"):
+        parser.exit(1, f"Error: Task {task_id_for_print} is in status {task.status!r}, but 'pr_created', 'waiting_human_review', or 'needs_fix' is required to merge.\n")
 
     if not task.pull_request or not task.pull_request.url:
         parser.exit(1, f"Error: Task {task_id_for_print} does not have an associated pull request URL.\n")

@@ -36,6 +36,14 @@ def state():
                         status="in_progress",
                         created_at="2024-01-01T00:00:00Z",
                         updated_at="2024-01-01T00:00:00Z"
+                    ),
+                    Task(
+                        id="task_3",
+                        title="Task 3",
+                        status="needs_fix",
+                        created_at="2024-01-01T00:00:00Z",
+                        updated_at="2024-01-01T00:00:00Z",
+                        pull_request=PullRequestInfo(url="https://github.com/owner/repo/pull/124")
                     )
                 ]
             )
@@ -68,6 +76,29 @@ def test_handle_merge_success(state, tmp_path):
 
     assert result == 0
     assert state.runs[0].tasks[0].status == "merged"
+
+@respx.mock
+def test_handle_merge_needs_fix_status(state, tmp_path):
+    repo = "owner/repo"
+    pull_number = 124
+
+    respx.get(f"https://api.github.com/repos/{repo}/pulls/{pull_number}").mock(
+        return_value=httpx.Response(200, json={"mergeable": True})
+    )
+
+    respx.put(f"https://api.github.com/repos/{repo}/pulls/{pull_number}/merge").mock(
+        return_value=httpx.Response(200, json={"merged": True})
+    )
+
+    args = argparse.Namespace(task_id="run_1:task_3", merge_method=None)
+    config = Config()
+    github_client = GitHubClient(token="test-token")
+    parser = argparse.ArgumentParser()
+
+    result = handle_merge(args, state, None, github_client, tmp_path, config, parser)
+
+    assert result == 0
+    assert state.runs[0].tasks[2].status == "merged"
 
 @respx.mock
 def test_handle_merge_not_mergeable(state, tmp_path):
