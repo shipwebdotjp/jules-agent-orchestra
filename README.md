@@ -36,14 +36,18 @@ If you do not run the command inside a git repository, pass `--repo owner/name`.
 
 ## Install
 
-From GitHub:
+From PyPI:
 
 ```bash
-pipx install git+https://github.com/shipwebdotjp/jules-agent-orchestra.git
+pipx install jules-agent
 ```
 
 ```bash
-uv tool install git+https://github.com/shipwebdotjp/jules-agent-orchestra.git
+uv tool install jules-agent
+```
+
+```bash
+pip install jules-agent
 ```
 
 From a local checkout:
