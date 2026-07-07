@@ -113,6 +113,58 @@ def test_handle_sync_no_output_on_no_change(capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
 
+def test_handle_sync_recomputes_run_status_without_task_changes(capsys):
+    # Setup state
+    task = Task(
+        id="TASK-1",
+        title="Test Task",
+        status="completed",
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        jules=JulesSessionInfo(
+            session_id="sess-1",
+            session_name="sessions/1",
+            state="COMPLETED"
+        )
+    )
+    run = Run(
+        id="run-1",
+        original_task="Test",
+        strategy="single_session",
+        status="running",
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        tasks=[task]
+    )
+    state = State(
+        project=ProjectState(root=".", repo="owner/repo"),
+        runs=[run]
+    )
+
+    client = MagicMock()
+    client.get_session.return_value = {
+        "state": "COMPLETED",
+        "outputs": []
+    }
+    client.list_activities.return_value = []
+
+    github_client = None
+    args = argparse.Namespace(json=False)
+
+    with MagicMock() as mock_save:
+        import jules_agent.cli.commands.sync as sync_mod
+        original_save = sync_mod.save_state
+        sync_mod.save_state = mock_save
+        try:
+            handle_sync(args, state, client, github_client, Path("."))
+        finally:
+            sync_mod.save_state = original_save
+
+    captured = capsys.readouterr()
+    assert "Run run-1: running -> completed" in captured.out
+    assert "  Task TASK-1:" not in captured.out
+    assert run.status == "completed"
+
 def test_handle_sync_json_no_output(capsys):
     # Setup state
     task = Task(

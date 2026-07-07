@@ -52,7 +52,6 @@ def handle_sync(
                 and run_initial_status == "completed"
                 and has_pr_sync_tasks
             )
-            run_updated = reopened_from_completed
 
             for task in run.tasks:
                 task_initial_status = task.status
@@ -85,17 +84,17 @@ def handle_sync(
 
                 if task_updated and task.status != task_initial_status:
                     updated_count += 1
-                    run_updated = True
                     task_status_changes.append(
                         (task.id, task_initial_status, task.status)
                     )
 
-            if run_updated:
-                run.status = get_run_sync_status(
-                    run,
-                    previous_status=run_initial_status,
-                    reopened_from_completed=reopened_from_completed,
-                )
+            new_run_status = get_run_sync_status(
+                run,
+                previous_status=run_initial_status,
+                reopened_from_completed=reopened_from_completed,
+            )
+            if new_run_status != run.status:
+                run.status = new_run_status
                 run.updated_at = (
                     datetime.datetime.now(datetime.timezone.utc)
                     .isoformat()

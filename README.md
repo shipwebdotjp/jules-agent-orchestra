@@ -103,6 +103,74 @@ The common flow is:
   - `--dry-run`: Show what would be deleted without making changes.
   - `--yes`, `-y`: Skip confirmation prompts and proceed immediately.
 
+### Status Transitions
+
+`run.status` is mostly derived from task states during `sync` and `import`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> planned: create / import
+    planned --> running: first dispatch
+    running --> completed: all tasks completed or merged
+    running --> failed: any task failed or pr_closed
+    completed --> running: sync reopens a completed run
+    planned --> cancelled: manual stop
+    running --> cancelled: manual stop
+    completed --> cancelled: manual stop
+    failed --> cancelled: manual stop
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> planned: create / import
+    planned --> dispatching
+    dispatching --> dispatched
+    dispatched --> planning
+    planning --> awaiting_plan_approval
+    awaiting_plan_approval --> plan_approved
+    plan_approved --> in_progress
+    in_progress --> awaiting_user_feedback
+    awaiting_user_feedback --> in_progress
+    in_progress --> paused
+    paused --> in_progress
+    in_progress --> completed
+    completed --> pr_created
+    pr_created --> waiting_human_review
+    waiting_human_review --> codex_reviewing
+    codex_reviewing --> needs_fix
+    needs_fix --> waiting_human_review
+    waiting_human_review --> merged
+    pr_created --> pr_closed
+    planned --> failed: dispatch / sync failure
+    dispatching --> failed: dispatch / sync failure
+    dispatched --> failed: dispatch / sync failure
+    planning --> failed: dispatch / sync failure
+    awaiting_plan_approval --> failed: dispatch / sync failure
+    plan_approved --> failed: dispatch / sync failure
+    in_progress --> failed: dispatch / sync failure
+    awaiting_user_feedback --> failed: dispatch / sync failure
+    paused --> failed: dispatch / sync failure
+    completed --> failed: sync sees pr_closed / failed
+    pr_created --> failed: sync sees failed
+    waiting_human_review --> failed: sync sees failed
+    codex_reviewing --> failed: sync sees failed
+    needs_fix --> failed: sync sees failed
+    planned --> cancelled: manual stop
+    dispatching --> cancelled: manual stop
+    dispatched --> cancelled: manual stop
+    planning --> cancelled: manual stop
+    awaiting_plan_approval --> cancelled: manual stop
+    plan_approved --> cancelled: manual stop
+    in_progress --> cancelled: manual stop
+    awaiting_user_feedback --> cancelled: manual stop
+    paused --> cancelled: manual stop
+    completed --> cancelled: manual stop
+    pr_created --> cancelled: manual stop
+    waiting_human_review --> cancelled: manual stop
+    codex_reviewing --> cancelled: manual stop
+    needs_fix --> cancelled: manual stop
+```
+
 ### Global Flags
 
 - `--version`: Show the package version.
