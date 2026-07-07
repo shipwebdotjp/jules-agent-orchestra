@@ -44,9 +44,44 @@ SUPPORTED_STRATEGIES = {
 def build_codex_prompt(task: str) -> str:
     return (
         "Analyze the task and return a JSON object matching the supplied schema.\n"
+        "\n"
         "Choose exactly one strategy:\n"
-        "  - single_session: one cohesive Jules session; use this for a small change that should be handled together\n"
-        "  - sequential_subtasks: tasks that depend on each other; multiple tasks will be executed one by one\n"
+        "  - single_session: one cohesive Jules session handling the work together\n"
+        "  - sequential_subtasks: tasks with a genuine blocking dependency, executed one by one\n"
+        "\n"
+        "Default assumption: prefer single_session. Splitting is the exception, not the default,\n"
+        "and must be justified by one of the criteria below — do not split merely because the\n"
+        "input task lists multiple checkbox items or touches multiple endpoints/layers.\n"
+        "\n"
+        "The input task often comes from a numbered section of a tasks.md spec file where a human\n"
+        "already broke work into checkbox items for readability. That checkbox-level split is NOT\n"
+        "a signal to create separate Jules sessions. Checkbox items under the same numbered heading\n"
+        "should usually be implemented together in single_session, because:\n"
+        "  - they typically share the same service/data layer and implementation surface\n"
+        "  - splitting risks one session changing shared logic in a way that silently breaks\n"
+        "    the other item, discovered only later when it's already merged\n"
+        "\n"
+        "Use sequential_subtasks ONLY when there is a genuine blocking dependency, meaning:\n"
+        "  - subtask B needs a concrete artifact/output/contract produced by subtask A\n"
+        "    (e.g. a new API shape, a schema, a new module) to be built as NEW functionality,\n"
+        "    not merely to be verified against\n"
+        "  - subtask A and B touch genuinely separate, non-overlapping subsystems/files\n"
+        "  - the two require separate review/deploy checkpoints for a real operational reason\n"
+        "\n"
+        "Do NOT use sequential_subtasks when a later item is primarily:\n"
+        "  - auditing/confirming/ensuring no regression from the earlier item\n"
+        "    (verbs like 'audit', 'confirm', 'ensure', 'keep working', 'no regressions')\n"
+        "  - the 'other side' of the same authorization/data-flow change (e.g. admin-side vs\n"
+        "    public-side of the same ownership check) — these should be implemented together\n"
+        "    so the shared code path stays consistent\n"
+        "\n"
+        "Before deciding, briefly reason (in the rationale field) about:\n"
+        "  1. Do the items share files / service layer / data model?\n"
+        "  2. Does the later item build new functionality from the earlier item's output,\n"
+        "     or does it just confirm the earlier item didn't break something?\n"
+        "  3. Would splitting risk an inconsistent or incomplete shared implementation?\n"
+        "Only choose sequential_subtasks if this reasoning clearly supports a genuine dependency.\n"
+        "\n"
         "For single_session, return exactly one task.\n"
         "Return only JSON.\n\n"
         f"Task:\n{task.strip()}"
@@ -58,6 +93,15 @@ def codex_schema() -> dict[str, object]:
         "type": "object",
         "additionalProperties": False,
         "properties": {
+            "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "description": (
+                    "Brief reasoning about shared implementation surface, whether later items "
+                    "build new functionality vs. verify the earlier one, and split risk. "
+                    "Written before deciding the strategy."
+                ),
+            },
             "strategy": {
                 "type": "string",
                 "enum": sorted(SUPPORTED_STRATEGIES),
@@ -86,9 +130,8 @@ def codex_schema() -> dict[str, object]:
                 },
             },
         },
-        "required": ["strategy", "tasks"],
+        "required": ["rationale", "strategy", "tasks"],
     }
-
 
 def clarification_schema() -> dict[str, object]:
     return {
