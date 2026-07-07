@@ -10,6 +10,7 @@ from .send import handle_send
 from .status import handle_status
 from .sync import handle_sync
 from .delete import handle_delete
+from .review_pass import handle_review_pass
 
 __all__ = [
     "handle_advance",
@@ -23,6 +24,7 @@ __all__ = [
     "handle_status",
     "handle_sync",
     "handle_delete",
+    "handle_review_pass",
     "run_clarification_loop",
     "run_confirmation_loop",
     "run_feedback_loop",

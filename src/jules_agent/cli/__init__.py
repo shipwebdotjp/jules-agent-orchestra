@@ -14,6 +14,7 @@ from .commands import (
     handle_merge,
     handle_next,
     handle_review,
+    handle_review_pass,
     handle_run,
     handle_send,
     handle_status,
@@ -187,6 +188,13 @@ def build_parser() -> argparse.ArgumentParser:
         "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
     )
 
+    review_pass_parser = subparsers.add_parser(
+        "review-pass", help="Manually mark a task as review_passed for current head SHA"
+    )
+    review_pass_parser.add_argument(
+        "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
+    )
+
     merge_parser = subparsers.add_parser("merge", help="Merge pull request for a task")
     merge_parser.add_argument(
         "task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)"
@@ -272,6 +280,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable all automatic behaviors (plan approval and feedback).",
     )
     advance_parser.add_argument(
+        "--skip-review",
+        action="store_true",
+        default=None,
+        help="Skip review gate and allow merging from pr_created or waiting_human_review.",
+    )
+    advance_parser.add_argument(
         "--json",
         action="store_true",
         help="Emit result as JSON.",
@@ -302,6 +316,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--auto",
         action="store_true",
         help="Enable all automatic behaviors (plan approval and feedback).",
+    )
+    cron_parser.add_argument(
+        "--skip-review",
+        action="store_true",
+        default=None,
+        help="Skip review gate and allow merging from pr_created or waiting_human_review.",
     )
     cron_parser.add_argument(
         "--json",
@@ -375,6 +395,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_feedback(args, state, client, cwd, parser, config=config)
         elif args.command == "review":
             return handle_review(args, state, client, github_client, cwd, parser, config=config)
+        elif args.command == "review-pass":
+            return handle_review_pass(args, state, client, github_client, cwd, parser, config=config)
         elif args.command == "send":
             return handle_send(args, state, client, github_client, cwd, parser)
         elif args.command == "merge":

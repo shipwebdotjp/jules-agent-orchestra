@@ -21,8 +21,7 @@ TaskStatus = Literal[
     "completed",
     "pr_created",
     "reviewing",
-    "codex_reviewing",
-    "jules_fixing",
+    "review_passed",
     "needs_fix",
     "waiting_human_review",
     "blocked",
@@ -34,9 +33,10 @@ TaskStatus = Literal[
 
 PR_SYNC_STATUSES: set[TaskStatus] = {
     "pr_created",
-    "waiting_human_review",
-    "codex_reviewing",
+    "reviewing",
+    "review_passed",
     "needs_fix",
+    "waiting_human_review",
 }
 
 
@@ -144,12 +144,14 @@ class TaskReviewAttempt:
 class TaskReview:
     sticky_comment_id: int | None = None
     sticky_comment_url: str | None = None
+    passed_head_sha: str | None = None
     attempts: list[TaskReviewAttempt] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "sticky_comment_id": self.sticky_comment_id,
             "sticky_comment_url": self.sticky_comment_url,
+            "passed_head_sha": self.passed_head_sha,
             "attempts": [a.to_dict() for a in self.attempts],
         }
 
@@ -158,6 +160,7 @@ class TaskReview:
         return cls(
             sticky_comment_id=data.get("sticky_comment_id"),
             sticky_comment_url=data.get("sticky_comment_url"),
+            passed_head_sha=data.get("passed_head_sha"),
             attempts=[TaskReviewAttempt.from_dict(a) for a in data.get("attempts", [])],
         )
 
@@ -229,16 +232,12 @@ class Task:
         pr_data = data.get("pull_request")
         review_data = data.get("review")
 
-        status = data["status"]
-        if status == "reviewing":
-            status = "codex_reviewing"
-
         return cls(
             id=data["id"],
             title=data["title"],
             description=data.get("description"),
             prompt=data.get("prompt"),
-            status=status,  # type: ignore
+            status=data["status"],  # type: ignore
             depends_on=data.get("depends_on", []),
             acceptance_criteria=data.get("acceptance_criteria", []),
             out_of_scope=data.get("out_of_scope", []),

@@ -93,6 +93,7 @@ The common flow is:
 - `send [task_id] message`: Send a manual message to a task's Jules session. If `task_id` is omitted, it shows a list of active tasks. If your message contains spaces and you omit `task_id`, the message must be quoted (e.g., `jules-agent send "hello world"`).
 - `feedback [task_id]`: Enter an interactive feedback loop to refine a task's plan or reply. If `task_id` is omitted, it shows a list of eligible tasks.
 - `review [task_id]`: Run a review for a task with an open pull request. If `task_id` is omitted, it shows a list of tasks with open pull requests.
+- `review-pass [task_id]`: Manually mark a task as `review_passed` for the current head SHA. Use this to bypass manual human review or override automated review results.
 - `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it first performs a full state synchronization and then shows a list of tasks with open pull requests.
 - `next [run_id]`: Dispatch the next task in a sequential run. If `run_id` is omitted, it shows a list of active sequential runs with planned tasks.
   - `--automation-mode <mode>`: Specify the automation mode for the Jules session (e.g., `AUTO_CREATE_PR` or `AUTOMATION_MODE_UNSPECIFIED`).
@@ -131,11 +132,14 @@ stateDiagram-v2
     paused --> in_progress
     in_progress --> completed
     completed --> pr_created
-    pr_created --> waiting_human_review
-    waiting_human_review --> codex_reviewing
-    codex_reviewing --> needs_fix
-    needs_fix --> waiting_human_review
-    waiting_human_review --> merged
+    pr_created --> reviewing
+    reviewing --> review_passed
+    reviewing --> needs_fix
+    needs_fix --> reviewing: new commit
+    review_passed --> merged: auto-merge / manual merge
+    review_passed --> reviewing: new commit
+    waiting_human_review --> review_passed: manual pass
+    waiting_human_review --> reviewing: new commit
     pr_created --> pr_closed
 ```
 
@@ -162,8 +166,9 @@ The `--tool-bin` flag and `tool_bin` config field let you point at a specific ba
 
 - `--auto-plan-approval`: Automatically approve plans when recommended by the planning tool.
 - `--auto-feedback`: Automatically send suggested feedback messages.
-- `--auto-merge`: Automatically merge pull requests when they are ready.
+- `--auto-merge`: Automatically merge pull requests when they are ready. By default, it requires the task to be in `review_passed` status.
 - `--auto`: Enable both plan approval and feedback (does NOT include merge).
+- `--skip-review`: Skip the review gate. When enabled, `pr_created` and `waiting_human_review` tasks are eligible for merging.
 - `--json`: Emit the result as a single JSON object.
 
 ### Examples
@@ -245,6 +250,7 @@ merge_method = "rebase"
 merge_delete_branch = true
 merge_pull = true
 automation_mode = "AUTO_CREATE_PR"
+skip_review = false
 ```
 
 Example:
