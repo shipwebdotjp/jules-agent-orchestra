@@ -105,6 +105,8 @@ The common flow is:
 
 ### Global Flags
 
+- `--version`: Show the package version.
+- `--debug`: Enable debug output.
 - `--repo owner/name`: Override the target repository.
 - `--tool-bin /path/to/tool`: Path to the backend tool executable.
 - `--tool <name>`: Backend tool to use.
@@ -196,6 +198,7 @@ repo = "owner/repo"
 github_token = "ghp_your-github-token"
 tool_bin = "path/to/tool"
 tool = "codex"
+debug = false
 gemini_skip_trust = false
 plan_tool = "claude"
 approve_tool = "gemini"

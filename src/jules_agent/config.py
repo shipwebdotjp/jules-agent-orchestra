@@ -27,6 +27,7 @@ class Config:
     auto_merge: bool = False
     auto: bool = False
     automation_mode: str | None = None
+    debug: bool = False
 
 
     @classmethod
@@ -51,6 +52,7 @@ class Config:
             auto_merge=data.get("auto_merge", False),
             auto=data.get("auto", False),
             automation_mode=data.get("automation_mode"),
+            debug=data.get("debug", False),
         )
 
 

@@ -115,6 +115,8 @@ jules-agent [flags] <command> [args]
 
 ### グローバルフラグ
 
+- `--version`: パッケージのバージョンを表示する
+- `--debug`: デバッグ出力を有効にする
 - `--repo owner/name`: 対象リポジトリを上書きする
 - `--tool-bin /path/to/tool`: backend tool の実行ファイルへのパス
 - `--tool <name>`: 使用する backend tool
@@ -208,6 +210,7 @@ repo = "owner/repo"
 github_token = "ghp_your-github-token"
 tool_bin = "path/to/tool"
 tool = "codex"
+debug = false
 gemini_skip_trust = false
 plan_tool = "claude"
 approve_tool = "gemini"
