@@ -36,7 +36,17 @@ class SelectionCancelled(Exception):
     pass
 
 
+DEBUG_ENABLED = False
+
+
+def set_debug(enabled: bool) -> None:
+    global DEBUG_ENABLED
+    DEBUG_ENABLED = enabled
+
+
 def debug_command(args: list[str], cwd: Path, *, label: str | None = None) -> None:
+    if not DEBUG_ENABLED:
+        return
     prefix = "DEBUG" if label is None else f"DEBUG[{label}]"
     print(
         f"{prefix}: running command (cwd={cwd}): {shlex.join(args)}",

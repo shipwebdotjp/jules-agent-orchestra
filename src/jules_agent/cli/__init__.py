@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 
+from .. import __version__
 from .commands import (
     handle_advance,
     handle_approve,
@@ -46,7 +47,7 @@ from ..models import (
 from ..pipeline import (
     suggest_reply,
 )
-from ..codex import PipelineError, SelectionCancelled
+from ..codex import PipelineError, SelectionCancelled, set_debug
 from ..git import get_git_remote_repo, get_git_root
 from ..persistence import load_state
 
@@ -113,6 +114,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         help="Path to a custom configuration file.",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug output.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"jules-agent {__version__}",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Subcommands")
@@ -306,6 +317,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
+    debug_enabled = args.debug or config.debug
+    set_debug(debug_enabled)
 
     api_key = os.environ.get("JULES_API_KEY") or config.api_key
     if not api_key:
