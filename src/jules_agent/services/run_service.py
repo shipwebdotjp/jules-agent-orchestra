@@ -18,7 +18,7 @@ from ..pipeline import (
 )
 from ..codex import ClarificationExchange
 from ..git import CommandRunner, get_git_branch, run_command
-from ..persistence import generate_run_id, save_state
+from ..persistence import save_state
 from ..cli.state import get_jules_state_mapping
 from .options import Options
 from .results import OperationResult
@@ -34,6 +34,7 @@ class RunOptions(Options):
     tool_name: str = "codex"
     tool_bin: Optional[str] = None
     gemini_skip_trust: bool = False
+    max_rounds: int = MAX_CLARIFICATION_ROUNDS
     input_func: Callable[[str], str] = input
     output_func: Callable[[str], None] = print
     render_plan_func: Optional[Callable[[Any], None]] = None
@@ -48,12 +49,12 @@ class RunService:
         state: State,
         client: JulesClient,
         cwd: Path,
-        runner: CommandRunner = run_command,
+        runner: CommandRunner = None,
     ):
         self.state = state
         self.client = client
         self.cwd = cwd
-        self.runner = runner
+        self.runner = runner or run_command
 
     def execute(self, options: RunOptions) -> OperationResult:
         if options.no_confirm:
@@ -151,7 +152,7 @@ class RunService:
 
     def run_clarification_loop_logic(self, options: RunOptions) -> str:
         clarification_history: list[ClarificationExchange] = []
-        max_rounds = MAX_CLARIFICATION_ROUNDS
+        max_rounds = options.max_rounds
         output = options.output_func
 
         for round_index in range(1, max_rounds + 1):
@@ -181,7 +182,7 @@ class RunService:
                 if options.prompt_for_clarification_answer_func:
                     answer = options.prompt_for_clarification_answer_func(question)
                 else:
-                    answer = options.input_func(f"Answer: ")
+                    answer = options.input_func("Answer: ")
 
                 clarification_history.append(
                     ClarificationExchange(

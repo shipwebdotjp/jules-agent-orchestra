@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import datetime
+import httpx
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..client import JulesClient
+from ..client import JulesClient, JulesAPIError
 from ..models import State, Run, Task
 from ..persistence import save_state
 from .options import Options
@@ -35,7 +36,7 @@ class SendService:
 
         try:
             self.client.send_message(task.jules.session_name, options.message)
-        except Exception as e:
+        except (JulesAPIError, httpx.RequestError) as e:
             return OperationResult(exit_code=1, message=f"Error: Failed to send message: {e}")
 
         task.updated_at = (

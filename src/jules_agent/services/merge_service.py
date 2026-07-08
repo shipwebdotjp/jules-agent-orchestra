@@ -44,10 +44,10 @@ class MergeService:
         task = options.task
         task_id_for_print = options.task_id_for_print
 
-        if task.status not in ("pr_created", "waiting_human_review", "needs_fix"):
+        if task.status not in ("pr_created", "review_passed", "waiting_human_review", "needs_fix"):
             return OperationResult(
                 exit_code=1,
-                message=f"Error: Task {task_id_for_print} is in status {task.status!r}, but 'pr_created', 'waiting_human_review', or 'needs_fix' is required to merge."
+                message=f"Error: Task {task_id_for_print} is in status {task.status!r}, but 'pr_created', 'review_passed', 'waiting_human_review', or 'needs_fix' is required to merge."
             )
 
         if not task.pull_request or not task.pull_request.url:

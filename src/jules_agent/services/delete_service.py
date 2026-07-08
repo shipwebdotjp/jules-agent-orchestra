@@ -36,7 +36,11 @@ class DeleteService:
             return OperationResult(exit_code=0)
 
         if not options.yes:
-            confirm = options.input_func(f"Are you sure you want to delete run {target_run.id} and its {tasks_count} tasks? [y/N]: ").strip().lower()
+            try:
+                confirm = options.input_func(f"Are you sure you want to delete run {target_run.id} and its {tasks_count} tasks? [y/N]: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                return OperationResult(exit_code=0, message="Aborted.")
+
             if confirm not in ("y", "yes"):
                 return OperationResult(exit_code=0, message="Aborted.")
 
@@ -57,7 +61,11 @@ class DeleteService:
             return OperationResult(exit_code=0)
 
         if not options.yes:
-            confirm = options.input_func(f"Are you sure you want to delete task {target_task.id} from run {target_run.id}? [y/N]: ").strip().lower()
+            try:
+                confirm = options.input_func(f"Are you sure you want to delete task {target_task.id} from run {target_run.id}? [y/N]: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                return OperationResult(exit_code=0, message="Aborted.")
+
             if confirm not in ("y", "yes"):
                 return OperationResult(exit_code=0, message="Aborted.")
 

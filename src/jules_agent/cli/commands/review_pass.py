@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import datetime
 from pathlib import Path
 from typing import Any
 
 from ...client import JulesClient
 from ...github import GitHubClient
-from ...models import State, TaskReview
-from ...persistence import save_state # re-added for tests
+from ...models import State
 from ..io import select_task_interactively
-from ..state import get_candidates, resolve_task, sync_task_state, extract_pull_request_number
+from ..state import get_candidates, resolve_task, sync_task_state
 from ...codex import OperationError
 from ...services.review_pass_service import ReviewPassService, ReviewPassOptions
 

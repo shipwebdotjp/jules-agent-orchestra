@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse
+import sys
 from pathlib import Path
 
 from ...client import JulesClient
@@ -28,9 +29,10 @@ def handle_advance(
 
     service = AdvanceService(state, client, github_client, cwd, config)
     options = AdvanceOptions(
-        interactive=True,
+        interactive=sys.stdin.isatty(),
         output_json=getattr(args, "json", False),
         args=args,
+        output_func=print,
     )
     result = service.execute(options)
     return result.exit_code
@@ -56,6 +58,7 @@ def handle_cron(
         interactive=False,
         output_json=getattr(args, "json", False),
         args=args,
+        output_func=print,
     )
     result = service.execute(options)
     return result.exit_code

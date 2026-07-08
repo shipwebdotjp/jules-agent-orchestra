@@ -8,7 +8,8 @@ from ...client import JulesClient
 from ...models import State, ProjectState
 from ...config import Config
 from ...codex import resolve_tool_for_phase
-from ...pipeline import decompose_task # re-added for tests
+from ...git import run_command
+from ...pipeline import decompose_task
 from ..io import (
     build_review_prompt,
     prompt_for_clarification_answer,
@@ -26,7 +27,7 @@ def run_confirmation_loop(
     tool_name: str = "codex",
     tool_bin: str | None = None,
     gemini_skip_trust: bool = False,
-    runner: Any = None,
+    runner: Any = run_command,
     input_func=input,
     output=print,
 ) -> Any:
@@ -52,7 +53,7 @@ def run_clarification_loop(
     tool_name: str = "codex",
     tool_bin: str | None = None,
     gemini_skip_trust: bool = False,
-    runner: Any = None,
+    runner: Any = run_command,
     input_func=input,
     output=print,
     max_rounds: int = 5,
@@ -66,6 +67,7 @@ def run_clarification_loop(
         gemini_skip_trust=gemini_skip_trust,
         input_func=input_func,
         output_func=output,
+        max_rounds=max_rounds,
         render_clarification_question_func=lambda q, i, t: render_clarification_question(q, output=output, index=i, total=t),
         prompt_for_clarification_answer_func=lambda q: prompt_for_clarification_answer(q, input_func=input_func, output=output),
     )

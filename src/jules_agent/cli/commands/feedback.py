@@ -11,7 +11,7 @@ from ...models import State
 from ...codex import OperationError, resolve_tool_for_phase
 from ...persistence import save_state
 from ..io import select_task_interactively
-from ..state import get_candidates, resolve_task, sync_task # re-added for tests
+from ..state import get_candidates, resolve_task
 from ...services.feedback_service import FeedbackService, FeedbackOptions
 
 
@@ -86,15 +86,11 @@ def handle_feedback(
     )
 
     result = service.execute(options)
-    outcome = result.data
 
     if not result.success:
-        if result.message == "failed":
-            return 1
         raise OperationError(result.exit_code, result.message or "Unknown error")
 
-    if outcome == "failed":
-        return 1
+    outcome = result.data
     if outcome == "skipped":
         return 0
 
