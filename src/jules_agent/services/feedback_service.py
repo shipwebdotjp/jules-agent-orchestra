@@ -108,6 +108,7 @@ class FeedbackService:
                         if last_activity_id == activity_id and last_advance_action == "approve_plan":
                             if options.interactive:
                                 output("Plan already approved for this activity. Skipping.")
+                            self._update_task_and_save(task)
                             return OperationResult(exit_code=0, data="completed")
 
                         if options.interactive:
@@ -124,6 +125,7 @@ class FeedbackService:
                     if last_activity_id == activity_id and last_feedback_hash == suggestion_hash:
                         if options.interactive:
                             output("Feedback already sent for this activity. Skipping.")
+                        self._update_task_and_save(task)
                         return OperationResult(exit_code=0, data="completed")
 
                     if options.interactive:
