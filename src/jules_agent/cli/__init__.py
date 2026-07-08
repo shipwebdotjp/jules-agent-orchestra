@@ -30,7 +30,6 @@ from .io import (
     select_task_interactively,
 )
 from .state import (
-    extract_pull_request_number,
     get_candidates,
     get_jules_state_mapping,
     get_run_sync_status,
@@ -41,6 +40,7 @@ from .state import (
 from ..client import JulesClient
 from ..config import load_config
 from ..github import GitHubClient
+from ..utils import extract_pull_request_number
 from ..models import (
     ProjectState,
     State,
