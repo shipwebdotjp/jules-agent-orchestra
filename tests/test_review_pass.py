@@ -37,7 +37,7 @@ def make_state(task: Task | None = None) -> State:
     return State(project=ProjectState(root="/tmp", repo="owner/repo"), runs=[run])
 
 
-@patch("jules_agent.cli.commands.review_pass.save_state")
+@patch("jules_agent.services.review_pass_service.save_state")
 @patch("jules_agent.cli.commands.review_pass.sync_task_state")
 @patch("jules_agent.cli.commands.review_pass.resolve_task")
 def test_handle_review_pass_with_task_id(mock_resolve, mock_sync, mock_save):
@@ -62,7 +62,7 @@ def test_handle_review_pass_with_task_id(mock_resolve, mock_sync, mock_save):
     mock_save.assert_called_once()
 
 
-@patch("jules_agent.cli.commands.review_pass.save_state")
+@patch("jules_agent.services.review_pass_service.save_state")
 @patch("jules_agent.cli.commands.review_pass.sync_task_state")
 @patch("jules_agent.cli.commands.review_pass.select_task_interactively")
 @patch("jules_agent.cli.commands.review_pass.get_candidates")

@@ -26,7 +26,7 @@ def test_parser_advance():
     assert args.auto_feedback
 
 @patch("jules_agent.cli.commands.advance.handle_sync")
-@patch("jules_agent.cli.advance_core.save_state")
+@patch("jules_agent.services.advance_service.save_state")
 def test_handle_advance_no_tasks(mock_save, mock_sync):
     mock_sync.return_value = 0
     state = State(project=ProjectState(root="/tmp", repo="owner/repo"), runs=[])
@@ -44,14 +44,16 @@ def test_handle_advance_no_tasks(mock_save, mock_sync):
     mock_sync.assert_called_once()
 
 @patch("jules_agent.cli.commands.advance.handle_sync")
-@patch("jules_agent.cli.advance_core.sync_task")
-@patch("jules_agent.cli.commands.feedback.run_feedback_loop")
+@patch("jules_agent.services.advance_service.sync_task")
+@patch("jules_agent.services.feedback_service.FeedbackService.execute")
 def test_handle_advance_picks_latest_task(
-    mock_feedback_loop, mock_sync_task, mock_sync
+    mock_feedback_execute, mock_sync_task, mock_sync
 ):
     mock_sync.return_value = 0
     mock_sync_task.return_value = True
-    mock_feedback_loop.return_value = "skipped"  # Stop loop
+
+    from jules_agent.services.results import OperationResult
+    mock_feedback_execute.return_value = OperationResult(exit_code=0, data="skipped")
 
     task1 = Task(
         id="1",
@@ -90,21 +92,23 @@ def test_handle_advance_picks_latest_task(
 
     handle_advance(args, state, client, github_client, Path("/tmp"), config)
 
-    # Verify that task2 (later updated_at) was passed to run_feedback_loop
-    mock_feedback_loop.assert_called_once()
-    called_task = mock_feedback_loop.call_args[0][0]
-    assert called_task.id == "2"
+    # Verify that task2 (later updated_at) was passed to feedback service
+    mock_feedback_execute.assert_called_once()
+    called_options = mock_feedback_execute.call_args[0][0]
+    assert called_options.task.id == "2"
 
 @patch("jules_agent.cli.commands.advance.handle_sync")
-@patch("jules_agent.cli.advance_core.sync_task")
-@patch("jules_agent.cli.commands.feedback.run_feedback_loop")
-@patch("jules_agent.cli.advance_core.save_state")
+@patch("jules_agent.services.advance_service.sync_task")
+@patch("jules_agent.services.feedback_service.FeedbackService.execute")
+@patch("jules_agent.services.advance_service.save_state")
 def test_handle_advance_stops_after_one_step(
-    mock_save, mock_feedback_loop, mock_sync_task, mock_sync
+    mock_save, mock_feedback_execute, mock_sync_task, mock_sync
 ):
     mock_sync.return_value = 0
     mock_sync_task.return_value = True
-    mock_feedback_loop.return_value = "completed"  # Action taken
+
+    from jules_agent.services.results import OperationResult
+    mock_feedback_execute.return_value = OperationResult(exit_code=0, data="completed")
 
     task = Task(
         id="1",
@@ -137,20 +141,22 @@ def test_handle_advance_stops_after_one_step(
     handle_advance(args, state, client, github_client, Path("/tmp"), config)
 
     # Now it must call it exactly once.
-    mock_feedback_loop.assert_called_once()
+    mock_feedback_execute.assert_called_once()
     mock_sync_task.assert_called_once()
     mock_save.assert_called_once()
 
 @patch("jules_agent.cli.commands.advance.handle_sync")
-@patch("jules_agent.cli.advance_core.sync_task")
-@patch("jules_agent.cli.commands.feedback.run_feedback_loop")
-@patch("jules_agent.cli.advance_core.save_state")
+@patch("jules_agent.services.advance_service.sync_task")
+@patch("jules_agent.services.feedback_service.FeedbackService.execute")
+@patch("jules_agent.services.advance_service.save_state")
 def test_handle_advance_save_even_on_sync_failure(
-    mock_save, mock_feedback_loop, mock_sync_task, mock_sync
+    mock_save, mock_feedback_execute, mock_sync_task, mock_sync
 ):
     mock_sync.return_value = 0
     mock_sync_task.return_value = False # Sync fails
-    mock_feedback_loop.return_value = "completed"  # Action taken
+
+    from jules_agent.services.results import OperationResult
+    mock_feedback_execute.return_value = OperationResult(exit_code=0, data="completed")
 
     task = Task(
         id="1",
@@ -182,13 +188,13 @@ def test_handle_advance_save_even_on_sync_failure(
 
     handle_advance(args, state, client, github_client, Path("/tmp"), config)
 
-    mock_feedback_loop.assert_called_once()
+    mock_feedback_execute.assert_called_once()
     mock_sync_task.assert_called_once()
     mock_save.assert_called_once()
 
 
 @patch("jules_agent.cli.commands.advance.handle_sync")
-@patch("jules_agent.cli.advance_core.dispatch_task")
+@patch("jules_agent.services.advance_service.AdvanceService.dispatch_task_logic")
 def test_handle_advance_dispatches_planned_fallback(mock_dispatch_task, mock_sync):
     mock_sync.return_value = 0
 
@@ -231,10 +237,10 @@ def test_handle_advance_dispatches_planned_fallback(mock_dispatch_task, mock_syn
 
 
 @patch("jules_agent.cli.commands.advance.handle_sync")
-@patch("jules_agent.cli.advance_core.dispatch_task")
-@patch("jules_agent.cli.advance_core.sync_task")
-@patch("jules_agent.cli.advance_core.save_state")
-@patch("jules_agent.cli.advance_core.AdvanceEngine._attempt_merge")
+@patch("jules_agent.services.advance_service.AdvanceService.dispatch_task_logic")
+@patch("jules_agent.services.advance_service.sync_task")
+@patch("jules_agent.services.advance_service.save_state")
+@patch("jules_agent.services.advance_service.AdvanceService._attempt_merge")
 def test_handle_advance_dispatches_next_after_merge(
     mock_attempt_merge,
     mock_save,
@@ -245,7 +251,7 @@ def test_handle_advance_dispatches_next_after_merge(
     mock_sync.return_value = 0
     mock_sync_task.return_value = True
 
-    def side_effect(task, skip_review=False):
+    def side_effect(task, options, skip_review=False):
         task.status = "merged"
         return True
 
@@ -297,7 +303,7 @@ def test_handle_advance_dispatches_next_after_merge(
 
 
 @patch("jules_agent.cli.commands.advance.handle_sync")
-@patch("jules_agent.cli.advance_core.dispatch_task")
+@patch("jules_agent.services.advance_service.AdvanceService.dispatch_task_logic")
 def test_handle_advance_does_not_dispatch_single_session_planned(
     mock_dispatch_task, mock_sync
 ):

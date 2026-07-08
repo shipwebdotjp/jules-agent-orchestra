@@ -71,8 +71,8 @@ def test_suggest_reply_raises_error_on_invalid_approval_recommended(mock_call_ba
             is_awaiting_plan_approval=True
         )
 
-@patch("jules_agent.cli.commands.feedback.sync_task")
-@patch("jules_agent.cli.commands.feedback.suggest_reply")
+@patch("jules_agent.services.feedback_service.sync_task")
+@patch("jules_agent.services.feedback_service.suggest_reply")
 def test_run_feedback_loop_approves_plan(mock_suggest, mock_sync) -> None:
     mock_sync.return_value = True
     task = Task(
@@ -114,8 +114,8 @@ def test_run_feedback_loop_approves_plan(mock_suggest, mock_sync) -> None:
     client.send_message.assert_not_called()
     assert task.status == "plan_approved"
 
-@patch("jules_agent.cli.commands.feedback.sync_task")
-@patch("jules_agent.cli.commands.feedback.suggest_reply")
+@patch("jules_agent.services.feedback_service.sync_task")
+@patch("jules_agent.services.feedback_service.suggest_reply")
 def test_run_feedback_loop_sends_message_when_not_recommended(mock_suggest, mock_sync) -> None:
     mock_sync.return_value = True
     task = Task(
@@ -156,7 +156,7 @@ def test_run_feedback_loop_sends_message_when_not_recommended(mock_suggest, mock
     client.approve_plan.assert_not_called()
     client.send_message.assert_called_once_with("sessions/s1", "Fix this")
 
-@patch("jules_agent.cli.commands.feedback.sync_task")
+@patch("jules_agent.services.feedback_service.sync_task")
 def test_run_feedback_loop_handles_sync_failure(mock_sync) -> None:
     mock_sync.return_value = False
     task = Task(

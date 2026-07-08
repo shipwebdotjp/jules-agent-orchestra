@@ -51,9 +51,9 @@ def test_get_candidates_next(sequential_state):
     assert task.id == "task2"
 
 @patch("jules_agent.cli.commands.next.select_task_interactively")
-@patch("jules_agent.cli.advance_core.save_state")
-@patch("jules_agent.cli.advance_core.get_git_branch", return_value="main")
-@patch("jules_agent.cli.advance_core.find_source_name", return_value="test_source")
+@patch("jules_agent.services.advance_service.save_state")
+@patch("jules_agent.services.advance_service.get_git_branch", return_value="main")
+@patch("jules_agent.services.advance_service.find_source_name", return_value="test_source")
 def test_handle_next_interactive(
     mock_find_source, mock_get_branch, mock_save_state, mock_select, sequential_state
 ):
@@ -87,9 +87,9 @@ def test_handle_next_with_run_id(sequential_state):
         "url": "http://jules/new"
     }
 
-    with patch("jules_agent.cli.advance_core.save_state"), \
-          patch("jules_agent.cli.advance_core.get_git_branch", return_value="main"), \
-           patch("jules_agent.cli.advance_core.find_source_name", return_value="test_source"):
+    with patch("jules_agent.services.advance_service.save_state"), \
+          patch("jules_agent.services.advance_service.get_git_branch", return_value="main"), \
+           patch("jules_agent.services.advance_service.find_source_name", return_value="test_source"):
         handle_next(args, sequential_state, mock_client, Path("/tmp"), Config())
 
     task2 = sequential_state.runs[0].tasks[1]

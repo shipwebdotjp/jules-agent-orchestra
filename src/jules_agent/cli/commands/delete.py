@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
-from ...models import State, Run, Task
+from ...models import State
 from ..io import select_task_interactively, select_run_interactively
 from ..state import resolve_task, get_candidates
-from ...persistence import save_state
-from ...codex import SelectionCancelled, PipelineError
+from ...codex import SelectionCancelled, PipelineError, OperationError
+from ...services.delete_service import DeleteService, DeleteOptions
 
 def handle_delete(args: argparse.Namespace, state: State, cwd: Path) -> int:
+    service = DeleteService(state, cwd)
+
     if args.subcommand == "run":
-        return handle_delete_run(args, state, cwd)
+        return handle_delete_run(args, state, service)
     elif args.subcommand == "task":
-        return handle_delete_task(args, state, cwd)
+        return handle_delete_task(args, state, service)
     else:
         print("Error: Unknown delete subcommand. Use 'run' or 'task'.")
         return 1
@@ -22,12 +23,10 @@ def handle_delete(args: argparse.Namespace, state: State, cwd: Path) -> int:
 def handle_delete_run(
     args: argparse.Namespace,
     state: State,
-    cwd: Path,
-    *,
-    input_func=input,
+    service: DeleteService,
 ) -> int:
     run_id = args.run_id
-    target_run: Run | None = None
+    target_run = None
 
     if run_id:
         for run in state.runs:
@@ -46,34 +45,31 @@ def handle_delete_run(
             print(e)
             return 1
 
-    tasks_count = len(target_run.tasks)
-    if args.dry_run:
-        print(f"[DRY RUN] Would delete run {target_run.id} and its {tasks_count} tasks.")
-        for task in target_run.tasks:
-            print(f"  - {task.id}: {task.title}")
-        return 0
+    options = DeleteOptions(
+        target_run=target_run,
+        dry_run=args.dry_run,
+        yes=args.yes,
+        input_func=input,
+        output_func=print,
+    )
 
-    if not args.yes:
-        confirm = input_func(f"Are you sure you want to delete run {target_run.id} and its {tasks_count} tasks? [y/N]: ").strip().lower()
-        if confirm not in ("y", "yes"):
-            print("Aborted.")
-            return 0
+    result = service.delete_run(options)
+    if not result.success:
+        raise OperationError(result.exit_code, result.message or "Unknown error")
 
-    state.runs.remove(target_run)
-    save_state(cwd, state)
-    print(f"Deleted run {target_run.id} and {tasks_count} tasks.")
+    if result.message:
+        print(result.message)
+
     return 0
 
 def handle_delete_task(
     args: argparse.Namespace,
     state: State,
-    cwd: Path,
-    *,
-    input_func=input,
+    service: DeleteService,
 ) -> int:
     task_id_arg = args.task_id
-    target_run: Run | None = None
-    target_task: Task | None = None
+    target_run = None
+    target_task = None
 
     if task_id_arg:
         try:
@@ -91,29 +87,20 @@ def handle_delete_task(
             print(e)
             return 1
 
-    if args.dry_run:
-        print(f"[DRY RUN] Would delete task {target_task.id} from run {target_run.id}.")
-        if len(target_run.tasks) == 1:
-            print(f"[DRY RUN] Run {target_run.id} will become empty and will also be deleted.")
-        return 0
+    options = DeleteOptions(
+        target_run=target_run,
+        target_task=target_task,
+        dry_run=args.dry_run,
+        yes=args.yes,
+        input_func=input,
+        output_func=print,
+    )
 
-    if not args.yes:
-        confirm = input_func(f"Are you sure you want to delete task {target_task.id} from run {target_run.id}? [y/N]: ").strip().lower()
-        if confirm not in ("y", "yes"):
-            print("Aborted.")
-            return 0
+    result = service.delete_task(options)
+    if not result.success:
+        raise OperationError(result.exit_code, result.message or "Unknown error")
 
-    target_run.tasks.remove(target_task)
-    pruned_run = False
-    if not target_run.tasks:
-        state.runs.remove(target_run)
-        pruned_run = True
-
-    save_state(cwd, state)
-
-    if pruned_run:
-        print(f"Deleted task {target_task.id} and pruned empty run {target_run.id}.")
-    else:
-        print(f"Deleted task {target_task.id} from run {target_run.id}.")
+    if result.message:
+        print(result.message)
 
     return 0
