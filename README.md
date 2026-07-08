@@ -87,15 +87,15 @@ The common flow is:
   - `-a`, `--all`: Show all runs, including completed, failed, and cancelled.
   - `--show-activities`: Show detailed session activities for each task.
 - `sync`: Synchronize the local state with the Jules API and GitHub (to update PR status).
-- `advance [flags]`: Automatically or interactively advance work across the next active task. For `sequential_subtasks`, a successful merge also dispatches the next `planned` task in the same run.
-- `cron [flags]`: Non-interactive background execution. This is a purely automated version of `advance` that never asks for input, and it also dispatches the next `planned` task after a successful sequential merge.
+- `advance [flags]`: Automatically or interactively advance work across the next active task. For `sequential_subtasks`, the next `planned` task is dispatched only after the previous task reaches `completed`/`merged` (e.g., a successful merge).
+- `cron [flags]`: Non-interactive background execution. This is a purely automated version of `advance` that never asks for input, and it also dispatches the next `planned` task only after the previous sequential task reaches `completed`/`merged`.
 - `approve [task_id]`: Manually approve the proposed plan for a specific task. If `task_id` is omitted, it shows a list of tasks awaiting plan approval.
 - `send [task_id] message`: Send a manual message to a task's Jules session. If `task_id` is omitted, it shows a list of active tasks. If your message contains spaces and you omit `task_id`, the message must be quoted (e.g., `jules-agent send "hello world"`).
 - `feedback [task_id]`: Enter an interactive feedback loop to refine a task's plan or reply. If `task_id` is omitted, it shows a list of eligible tasks.
 - `review [task_id]`: Run a review for a task with an open pull request. If `task_id` is omitted, it shows a list of tasks with open pull requests.
 - `review-pass [task_id]`: Manually mark a task as `review_passed` for the current head SHA. Use this to bypass manual human review or override automated review results.
 - `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it first performs a full state synchronization and then shows a list of tasks with open pull requests.
-- `next [run_id]`: Dispatch the next task in a sequential run. If `run_id` is omitted, it shows a list of active sequential runs with planned tasks.
+- `next [run_id]`: Dispatch the next task in a sequential run. All earlier tasks in the run must be `completed` or `merged`. If `run_id` is omitted, it shows a list of active sequential runs with planned tasks.
   - `--automation-mode <mode>`: Specify the automation mode for the Jules session (e.g., `AUTO_CREATE_PR` or `AUTOMATION_MODE_UNSPECIFIED`).
 - `delete run [run_id]`: Delete a run and its tasks from the local state.
 - `delete task [task_id]`: Delete a specific task from the local state. If the run becomes empty, it is also removed.

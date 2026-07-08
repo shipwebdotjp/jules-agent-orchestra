@@ -247,7 +247,15 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
                             first_planned = t
                             break
                     if first_planned and first_planned.id == task.id:
+                        # All earlier tasks must be terminal (completed/merged)
+                        # before dispatching the next one in a sequential run.
                         eligible = True
+                        for t in run.tasks:
+                            if t.id == first_planned.id:
+                                break
+                            if t.status not in ("completed", "merged"):
+                                eligible = False
+                                break
 
             if eligible:
                 candidates.append((run, task))

@@ -50,6 +50,20 @@ def test_get_candidates_next(sequential_state):
     assert run.id == "run1"
     assert task.id == "task2"
 
+
+def test_get_candidates_next_blocks_when_prior_in_progress(sequential_state):
+    """When earlier task is not terminal, the next planned task is not eligible."""
+    sequential_state.runs[0].tasks[0].status = "in_progress"
+    candidates = get_candidates(sequential_state, "next")
+    assert candidates == []
+
+
+def test_get_candidates_next_blocks_when_prior_failed(sequential_state):
+    """A failed earlier task blocks dispatching the next planned task."""
+    sequential_state.runs[0].tasks[0].status = "failed"
+    candidates = get_candidates(sequential_state, "next")
+    assert candidates == []
+
 @patch("jules_agent.cli.commands.next.select_task_interactively")
 @patch("jules_agent.cli.advance_core.save_state")
 @patch("jules_agent.cli.advance_core.get_git_branch", return_value="main")
