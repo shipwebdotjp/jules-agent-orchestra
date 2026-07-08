@@ -21,10 +21,10 @@ from ..git import get_git_branch
 from .state import (
     get_candidates,
     sync_task,
-    extract_pull_request_number,
     get_jules_state_mapping,
     sync_task_state,
 )
+from ..utils import extract_pull_request_number
 from ..codex import resolve_tool_for_phase
 
 logger = logging.getLogger("jules_agent")
@@ -397,7 +397,19 @@ class AdvanceEngine:
             planned_candidates = get_candidates(self.state, "next")
             if not planned_candidates:
                 return None
-            return planned_candidates[0]
+            # Defense in depth: ensure all prior tasks in the run are
+            # terminal (completed/merged) before dispatching the next.
+            run, task = planned_candidates[0]
+            prior_done = True
+            for t in run.tasks:
+                if t.id == task.id:
+                    break
+                if t.status not in ("completed", "merged"):
+                    prior_done = False
+                    break
+            if not prior_done:
+                return None
+            return run, task
 
         # Sort by updated_at (descending) then traversal order (ascending)
         # Using -index for ascending order when reverse=True
@@ -417,6 +429,14 @@ class AdvanceEngine:
 
         if not next_task:
             return
+
+        # Defense in depth: only dispatch when all earlier tasks are
+        # terminal (completed/merged) to keep sequential execution strict.
+        for t in run.tasks:
+            if t.id == next_task.id:
+                break
+            if t.status not in ("completed", "merged"):
+                return
 
         dispatch_task(
             task=next_task,
