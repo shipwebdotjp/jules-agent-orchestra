@@ -695,6 +695,8 @@ def perform_task_review(
         f"- `status`: 'pass' if no findings, 'changes_requested' if there are findings\n"
         f"- `summary`: brief overall assessment\n"
         f"- `findings`: list of {{file, line, message}} — only include if criteria above are met\n"
+        f"  `file` MUST be a path relative to the repository root "
+        f"(e.g. `src/jules_agent/review.py`), never an absolute path.\n"
         f"- `next_steps`: concrete next action for the implementer\n"
     )
 
@@ -756,5 +758,5 @@ def perform_task_review(
     update_sticky_comment(github_client, repo, issue_number, body, task)
 
     # Apply results to task state
-    apply_review_result(task, result, head_sha, github_client, repo, issue_number)
+    apply_review_result(task, result, head_sha, github_client, repo, issue_number, cwd)
     save_state(cwd, state)

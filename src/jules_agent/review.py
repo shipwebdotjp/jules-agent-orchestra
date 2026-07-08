@@ -125,6 +125,18 @@ def update_sticky_comment(
         raise
 
 
+def _to_project_relative(path: str, cwd: Path) -> str:
+    if not path:
+        return path
+    p = Path(path)
+    if not p.is_absolute():
+        return path
+    try:
+        return p.relative_to(cwd).as_posix()
+    except ValueError:
+        return path
+
+
 def apply_review_result(
     task: Task,
     result: dict[str, Any],
@@ -132,6 +144,7 @@ def apply_review_result(
     github_client: GitHubClient,
     repo: str,
     issue_number: int,
+    cwd: Path,
 ) -> None:
     status = result["status"]
     summary = result["summary"]
@@ -167,7 +180,7 @@ def apply_review_result(
             "### Findings",
         ]
         for f in result.get("findings", []):
-            file = f.get("file")
+            file = _to_project_relative(f.get("file") or "", cwd)
             line = f.get("line")
             msg = f.get("message")
             line_info = f" (line {line})" if line else ""
