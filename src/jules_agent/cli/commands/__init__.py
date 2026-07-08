@@ -6,6 +6,7 @@ from .merge import handle_merge
 from .next import handle_next
 from .review import handle_review
 from .run import handle_run, run_clarification_loop, run_confirmation_loop
+from .retry import handle_retry
 from .send import handle_send
 from .status import handle_status
 from .sync import handle_sync
@@ -20,6 +21,7 @@ __all__ = [
     "handle_merge",
     "handle_next",
     "handle_run",
+    "handle_retry",
     "handle_send",
     "handle_status",
     "handle_sync",

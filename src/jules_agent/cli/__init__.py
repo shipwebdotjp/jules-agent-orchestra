@@ -15,6 +15,7 @@ from .commands import (
     handle_import,
     handle_merge,
     handle_next,
+    handle_retry,
     handle_review,
     handle_review_pass,
     handle_run,
@@ -243,6 +244,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Automation mode for the Jules session (e.g., AUTO_CREATE_PR).",
     )
 
+    retry_parser = subparsers.add_parser("retry", help="Retry a failed task with a new Jules session")
+    retry_parser.add_argument("task_id", nargs="?", help="Task ID (RUN_ID:TASK_ID or TASK_ID)")
+    retry_parser.add_argument(
+        "--automation-mode",
+        help="Automation mode for the Jules session (e.g., AUTO_CREATE_PR).",
+    )
+
     delete_parser = subparsers.add_parser("delete", aliases=["rm"], help="Delete a run or task from local state")
     delete_parser.add_argument("--dry-run", action="store_true", help="Show what would be deleted without actually deleting")
     delete_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
@@ -412,6 +420,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_merge(args, state, client, github_client, cwd, config)
         elif args.command == "next":
             return handle_next(args, state, client, cwd, config)
+        elif args.command == "retry":
+            return handle_retry(args, state, client, cwd, config)
         elif args.command in ("delete", "rm"):
             return handle_delete(args, state, cwd)
 
