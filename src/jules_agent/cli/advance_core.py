@@ -273,7 +273,7 @@ class AdvanceEngine:
                                 action_name = "re_review_triggered"
 
                 # Review loop
-                if target_task.status in ("pr_created", "reviewing"):
+                if (target_task.status == "pr_created" and not skip_review) or target_task.status == "reviewing":
                     from ..pipeline import perform_task_review
 
                     tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase(

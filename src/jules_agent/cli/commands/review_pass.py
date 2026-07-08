@@ -36,6 +36,10 @@ def handle_review_pass(
 
     sync_task_state(client, github_client, state, run, task, cwd)
 
+    if task.status in ("merged", "pr_closed"):
+        print(f"Task {task.id} is already in {task.status} status. Skipping review pass.")
+        return 0
+
     if not task.pull_request or not task.pull_request.url:
          parser.exit(1, f"Error: Task {task.id} has no pull request.\n")
 

@@ -136,7 +136,7 @@ stateDiagram-v2
     reviewing --> review_passed
     reviewing --> needs_fix
     needs_fix --> reviewing: new commit
-    review_passed --> merged: auto-merge / manual merge
+    review_passed --> merged: auto-merge / manual merge (if SHA matches passed_head_sha)
     review_passed --> reviewing: new commit
     waiting_human_review --> review_passed: manual pass
     waiting_human_review --> reviewing: new commit
@@ -166,9 +166,9 @@ The `--tool-bin` flag and `tool_bin` config field let you point at a specific ba
 
 - `--auto-plan-approval`: Automatically approve plans when recommended by the planning tool.
 - `--auto-feedback`: Automatically send suggested feedback messages.
-- `--auto-merge`: Automatically merge pull requests when they are ready. By default, it requires the task to be in `review_passed` status.
+- `--auto-merge`: Automatically merge pull requests when they are ready. By default, it requires the task to be in `review_passed` status and the `passed_head_sha` recorded in the review metadata to match the current PR head SHA.
 - `--auto`: Enable both plan approval and feedback (does NOT include merge).
-- `--skip-review`: Skip the review gate. When enabled, `pr_created` and `waiting_human_review` tasks are eligible for merging.
+- `--skip-review`: Skip the review gate. When enabled, `pr_created` and `waiting_human_review` tasks are eligible for merging regardless of review status or SHA mismatch.
 - `--json`: Emit the result as a single JSON object.
 
 ### Examples

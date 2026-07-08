@@ -150,7 +150,7 @@ stateDiagram-v2
     reviewing --> review_passed
     reviewing --> needs_fix
     needs_fix --> reviewing: 新しいコミット
-    review_passed --> merged: 自動マージ / 手動マージ
+    review_passed --> merged: 自動マージ / 手動マージ (現在の head SHA が passed_head_sha と一致する場合)
     review_passed --> reviewing: 新しいコミット
     waiting_human_review --> review_passed: 手動承認
     waiting_human_review --> reviewing: 新しいコミット
@@ -208,9 +208,9 @@ stateDiagram-v2
 
 - `--auto-plan-approval`: 計画用ツールが推奨したときに、計画を自動承認する
 - `--auto-feedback`: 提案されたフィードバックメッセージを自動送信する
-- `--auto-merge`: 準備ができた pull request を自動マージする。既定では task が `review_passed` 状態である必要がある
+- `--auto-merge`: 準備ができた pull request を自動マージする。既定では task が `review_passed` 状態であり、かつ記録された `passed_head_sha` が現在の PR head SHA と一致している必要がある
 - `--auto`: 計画承認とフィードバックの両方を有効にする（マージは含まない）
-- `--skip-review`: レビューゲートをスキップする。有効な場合、`pr_created` や `waiting_human_review` のタスクもマージ対象になる
+- `--skip-review`: レビューゲートをスキップする。有効な場合、`pr_created` や `waiting_human_review` のタスクも、レビュー状態や SHA の一致に関わらずマージ対象になる
 - `--json`: 結果を単一の JSON オブジェクトとして出力する
 
 ### 例
