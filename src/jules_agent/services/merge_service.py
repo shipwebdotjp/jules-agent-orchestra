@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from ..client import JulesClient
 from ..config import Config
