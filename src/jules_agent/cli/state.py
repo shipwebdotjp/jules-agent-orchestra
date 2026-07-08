@@ -233,21 +233,22 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
             elif command == "delete task":
                 eligible = True
             elif command == "next":
-                # For 'next', we want the first 'planned' task of a running sequential run.
-                # Since get_candidates iterates over all tasks, we need to be careful.
-                # We only want to return the FIRST planned task for each eligible run.
+                # For 'next', we want the first 'planned' task of a running sequential run
+                # if all prior tasks are terminal (merged or completed).
                 if (
                     run.strategy == "sequential_subtasks"
                     and run.status == "running"
                     and task.status == "planned"
                 ):
-                    # Check if this is the first planned task in this run
-                    first_planned = None
+                    prior_done = True
                     for t in run.tasks:
-                        if t.status == "planned":
-                            first_planned = t
+                        if t.id == task.id:
                             break
-                    if first_planned and first_planned.id == task.id:
+                        if t.status not in ("completed", "merged"):
+                            prior_done = False
+                            break
+
+                    if prior_done:
                         eligible = True
 
             if eligible:

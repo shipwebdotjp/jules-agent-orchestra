@@ -412,7 +412,16 @@ class AdvanceEngine:
         next_task = None
         for task in run.tasks:
             if task.status == "planned":
-                next_task = task
+                # Ensure all prior tasks are terminal
+                prior_done = True
+                for t in run.tasks:
+                    if t.id == task.id:
+                        break
+                    if t.status not in ("completed", "merged"):
+                        prior_done = False
+                        break
+                if prior_done:
+                    next_task = task
                 break
 
         if not next_task:

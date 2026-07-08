@@ -244,7 +244,12 @@ def test_handle_advance_dispatches_next_after_merge(
 ):
     mock_sync.return_value = 0
     mock_sync_task.return_value = True
-    mock_attempt_merge.return_value = True
+
+    def side_effect(task, skip_review=False):
+        task.status = "merged"
+        return True
+
+    mock_attempt_merge.side_effect = side_effect
 
     now = "2023-01-01T00:00:00Z"
     task1 = Task(
