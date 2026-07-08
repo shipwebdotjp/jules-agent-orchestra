@@ -390,17 +390,17 @@ def call_backend(
 def resolve_tool_for_phase(
     phase: str,
     config: Any,
-    args: Any = None,
+    overrides: Any = None,
 ) -> tuple[str, str | None, bool]:
     # 1. Resolve tool name
     tool_name = None
-    if args:
-        tool_name = getattr(args, f"{phase}_tool", None)
+    if overrides:
+        tool_name = getattr(overrides, f"{phase}_tool", None)
     if not tool_name:
         tool_name = getattr(config, f"{phase}_tool", None)
     if not tool_name:
-        if args:
-            tool_name = getattr(args, "tool", None)
+        if overrides:
+            tool_name = getattr(overrides, "tool", None)
     if not tool_name:
         tool_name = getattr(config, "tool", "codex")
 
@@ -408,14 +408,20 @@ def resolve_tool_for_phase(
 
     # 2. Resolve tool binary
     tool_bin = None
-    if args:
-        tool_bin = getattr(args, "tool_bin", None)
+    if overrides:
+        tool_bin = getattr(overrides, "tool_bin", None)
 
     if not tool_bin:
         tool_bin = getattr(config, "tool_bin", None)
 
-    gemini_skip_trust = getattr(args, "gemini_skip_trust", None) if args else None
+    gemini_skip_trust = (
+        getattr(overrides, "gemini_skip_trust", None) if overrides else None
+    )
     if gemini_skip_trust is None:
         gemini_skip_trust = getattr(config, "gemini_skip_trust", False)
 
-    return tool_name, tool_bin, bool(gemini_skip_trust) if tool_name == "gemini" else False
+    return (
+        tool_name,
+        tool_bin,
+        bool(gemini_skip_trust) if tool_name == "gemini" else False,
+    )

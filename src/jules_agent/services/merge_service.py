@@ -22,6 +22,7 @@ class MergeOptions(Options):
     merge_method: str | None = None
     delete_branch: bool | None = None
     pull: bool | None = None
+    output_func: Callable[[str], None] = print
 
 class MergeService:
     def __init__(
@@ -43,6 +44,7 @@ class MergeService:
     def execute(self, options: MergeOptions) -> OperationResult:
         task = options.task
         task_id_for_print = options.task_id_for_print
+        output = options.output_func
 
         if task.status not in ("pr_created", "review_passed", "waiting_human_review", "needs_fix"):
             return OperationResult(
@@ -88,6 +90,7 @@ class MergeService:
         save_state(self.cwd, self.state)
 
         # Post-merge cleanup
+        output("Successfully merged PR.")
         delete_branch = options.delete_branch
         if delete_branch is None:
             delete_branch = self.config.merge_delete_branch

@@ -38,7 +38,20 @@ logger = logging.getLogger("jules_agent")
 class AdvanceOptions(Options):
     interactive: bool = True
     output_json: bool = False
-    args: Any = None # Needed for resolve_tool_for_phase
+    auto: bool = False
+    auto_plan_approval: Optional[bool] = None
+    auto_feedback: Optional[bool] = None
+    auto_merge: Optional[bool] = None
+    skip_review: Optional[bool] = None
+    automation_mode: Optional[str] = None
+    merge_method: Optional[str] = None
+    tool: Optional[str] = None
+    tool_bin: Optional[str] = None
+    gemini_skip_trust: Optional[bool] = None
+    # Phase-specific tool overrides
+    approve_tool: Optional[str] = None
+    feedback_tool: Optional[str] = None
+    review_tool: Optional[str] = None
     output_func: Callable[[str], None] = print
 
 class AdvanceService:
@@ -89,7 +102,7 @@ class AdvanceService:
             self.dispatch_task_logic(
                 task=target_task,
                 run=target_run,
-                args=options.args,
+                automation_mode=options.automation_mode,
                 verbose=not options.output_json,
                 output_func=output,
             )
@@ -115,18 +128,18 @@ class AdvanceService:
         auto_merge = getattr(self.config, "auto_merge", False)
         skip_review = getattr(self.config, "skip_review", False)
 
-        if getattr(options.args, "auto", False):
+        if options.auto:
             auto_plan_approval = True
             auto_feedback = True
 
-        if getattr(options.args, "auto_plan_approval", None) is not None:
-            auto_plan_approval = options.args.auto_plan_approval
-        if getattr(options.args, "auto_feedback", None) is not None:
-            auto_feedback = options.args.auto_feedback
-        if getattr(options.args, "auto_merge", None) is not None:
-            auto_merge = options.args.auto_merge
-        if getattr(options.args, "skip_review", None) is not None:
-            skip_review = options.args.skip_review
+        if options.auto_plan_approval is not None:
+            auto_plan_approval = options.auto_plan_approval
+        if options.auto_feedback is not None:
+            auto_feedback = options.auto_feedback
+        if options.auto_merge is not None:
+            auto_merge = options.auto_merge
+        if options.skip_review is not None:
+            skip_review = options.skip_review
 
         action_taken = False
         action_name = None
@@ -137,7 +150,7 @@ class AdvanceService:
             if target_task.status in ("awaiting_plan_approval", "awaiting_user_feedback"):
                 phase = "approve" if target_task.status == "awaiting_plan_approval" else "feedback"
                 tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase(
-                    phase, self.config, options.args
+                    phase, self.config, options
                 )
 
                 feedback_service = FeedbackService(self.state, self.client, self.cwd)
@@ -213,7 +226,7 @@ class AdvanceService:
 
                     if (target_task.status == "pr_created" and not skip_review) or target_task.status == "reviewing":
                         tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase(
-                            "review", self.config, options.args
+                            "review", self.config, options
                         )
                         try:
                             perform_task_review(
@@ -280,7 +293,12 @@ class AdvanceService:
             save_state(self.cwd, self.state)
 
             if action_name == "merged" and target_run.strategy == "sequential_subtasks":
-                self._dispatch_next_planned(target_run, options)
+                self._dispatch_next_planned(
+                    target_run,
+                    automation_mode=options.automation_mode,
+                    verbose=not options.output_json,
+                    output_func=output,
+                )
 
         if options.output_json:
             output(json.dumps({
@@ -324,7 +342,13 @@ class AdvanceService:
         eligible_tasks.sort(key=lambda x: (x[1].updated_at, -x[2]), reverse=True)
         return eligible_tasks[0][0], eligible_tasks[0][1]
 
-    def _dispatch_next_planned(self, run: Run, options: AdvanceOptions) -> None:
+    def _dispatch_next_planned(
+        self,
+        run: Run,
+        automation_mode: Optional[str] = None,
+        verbose: bool = True,
+        output_func: Callable[[str], None] = print,
+    ) -> None:
         if run.strategy != "sequential_subtasks" or run.status != "running":
             return
 
@@ -348,22 +372,22 @@ class AdvanceService:
         self.dispatch_task_logic(
             task=next_task,
             run=run,
-            args=options.args,
-            verbose=not options.output_json,
-            output_func=options.output_func,
+            automation_mode=automation_mode,
+            verbose=verbose,
+            output_func=output_func,
         )
 
     def dispatch_task_logic(
         self,
         task: Task,
         run: Run,
-        args: Any,
+        automation_mode: Optional[str] = None,
         verbose: bool = True,
         output_func: Callable[[str], None] = print,
     ) -> None:
         source_name = find_source_name(self.client, self.state.project.repo)
         starting_branch = get_git_branch(self.cwd)
-        automation_mode = getattr(args, "automation_mode", None) or getattr(self.config, "automation_mode", None) or "AUTO_CREATE_PR"
+        automation_mode = automation_mode or getattr(self.config, "automation_mode", None) or "AUTO_CREATE_PR"
 
         if verbose:
             output_func(f"Dispatching next task: {task.id} - {task.title}")
@@ -450,7 +474,7 @@ class AdvanceService:
         if not can_merge:
             return False
 
-        merge_method = getattr(options.args, "merge_method", None) or self.config.merge_method or "merge"
+        merge_method = options.merge_method or self.config.merge_method or "merge"
         try:
             self.github_client.merge_pull_request(repo, pull_number, merge_method=merge_method)
             task.status = "merged"

@@ -63,7 +63,7 @@ class RetryService:
             source_name = find_source_name(self.client, self.state.project.repo)
             starting_branch = get_git_branch(self.cwd)
             automation_mode = (
-                getattr(options.args, "automation_mode", None)
+                options.automation_mode
                 or getattr(self.config, "automation_mode", None)
                 or "AUTO_CREATE_PR"
             )

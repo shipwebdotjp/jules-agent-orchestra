@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from ...client import JulesClient
@@ -23,6 +24,7 @@ def handle_sync(
         skip_pr_sync=skip_pr_sync,
         json_output=getattr(args, "json", False),
         output_func=print,
+        error_func=lambda x: print(x, file=sys.stderr),
     )
     result = service.execute(options)
 

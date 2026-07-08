@@ -15,6 +15,7 @@ class ApproveOptions(Options):
     run: Run
     task: Task
     task_id_for_print: str
+    output_func: Callable[[str], None] = print
 
 class ApproveService:
     def __init__(self, state: State, client: JulesClient, cwd: Path):
@@ -25,6 +26,7 @@ class ApproveService:
     def execute(self, options: ApproveOptions) -> OperationResult:
         task = options.task
         task_id_for_print = options.task_id_for_print
+        output = options.output_func
 
         if not task.jules:
             return OperationResult(
@@ -40,6 +42,7 @@ class ApproveService:
 
         # Update local state
         task.status = "plan_approved"
+        output("Plan approved in Jules.")
         task.updated_at = (
             datetime.datetime.now(datetime.timezone.utc)
             .isoformat()

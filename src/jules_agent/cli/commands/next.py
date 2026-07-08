@@ -48,7 +48,11 @@ def handle_next(
         target_run, next_task = select_task_interactively(candidates, "next")
 
     service = NextService(state, client, cwd, config)
-    options = NextOptions(run=target_run, task=next_task, args=args)
+    options = NextOptions(
+        run=target_run,
+        task=next_task,
+        automation_mode=getattr(args, "automation_mode", None),
+    )
 
     result = service.execute(options)
     if not result.success:
