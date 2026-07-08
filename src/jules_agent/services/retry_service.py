@@ -12,6 +12,7 @@ from ..pipeline import find_source_name
 from ..git import get_git_branch
 from .options import RetryOptions
 from .results import OperationResult
+from .state_utils import get_jules_state_mapping, get_run_sync_status
 
 logger = logging.getLogger("jules_agent")
 
@@ -56,22 +57,17 @@ class RetryService:
         )
         save_state(self.cwd, self.state)
 
-        source_name = find_source_name(self.client, self.state.project.repo)
-        starting_branch = get_git_branch(self.cwd)
-        automation_mode = (
-            getattr(options.args, "automation_mode", None)
-            or getattr(self.config, "automation_mode", None)
-            or "AUTO_CREATE_PR"
-        )
-
-        from ..cli.state import (
-            get_jules_state_mapping,
-            get_run_sync_status,
-        )
-
         output(f"Retrying task: {task.id} - {task.title} (attempt {retry_count})")
 
         try:
+            source_name = find_source_name(self.client, self.state.project.repo)
+            starting_branch = get_git_branch(self.cwd)
+            automation_mode = (
+                getattr(options.args, "automation_mode", None)
+                or getattr(self.config, "automation_mode", None)
+                or "AUTO_CREATE_PR"
+            )
+
             session = self.client.create_session(
                 prompt=task.prompt or task.title,
                 source_name=source_name,
@@ -102,8 +98,12 @@ class RetryService:
             message = None
         except Exception as e:
             task.status = "failed"
-            run.status = "failed"
-            logger.error(f"  Failed: {e}")
+            run.status = get_run_sync_status(
+                run,
+                previous_status="failed",
+                reopened_from_completed=(previous_run_status == "completed"),
+            )
+            logger.exception(f"  Failed: {e}")
             exit_code = 1
             message = str(e)
 

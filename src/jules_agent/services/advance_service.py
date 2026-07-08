@@ -24,9 +24,9 @@ from ..cli.state import (
     get_candidates,
     sync_task,
     extract_pull_request_number,
-    get_jules_state_mapping,
     sync_task_state,
 )
+from .state_utils import get_jules_state_mapping
 from ..codex import resolve_tool_for_phase
 from .options import Options
 from .results import OperationResult

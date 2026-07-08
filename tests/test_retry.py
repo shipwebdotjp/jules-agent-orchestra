@@ -40,7 +40,7 @@ def mock_state():
 def test_get_candidates_retry(mock_state):
     candidates = get_candidates(mock_state, "retry")
     assert len(candidates) == 1
-    run, task = candidates[0]
+    _run, task = candidates[0]
     assert task.id == "TASK-001"
     assert task.status == "failed"
 
