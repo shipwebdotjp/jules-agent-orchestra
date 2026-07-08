@@ -232,6 +232,8 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
                 )
             elif command == "delete task":
                 eligible = True
+            elif command == "retry":
+                eligible = task.status == "failed"
             elif command == "next":
                 # For 'next', we want the first 'planned' task of a running sequential run
                 # if all prior tasks are terminal (merged or completed).

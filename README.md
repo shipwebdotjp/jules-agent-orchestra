@@ -97,6 +97,9 @@ The common flow is:
 - `merge [task_id]`: Manually merge the pull request associated with a task. If `task_id` is omitted, it first performs a full state synchronization and then shows a list of tasks with open pull requests.
 - `next [run_id]`: Dispatch the next task in a sequential run. If `run_id` is omitted, it shows a list of active sequential runs with planned tasks.
   - `--automation-mode <mode>`: Specify the automation mode for the Jules session (e.g., `AUTO_CREATE_PR` or `AUTOMATION_MODE_UNSPECIFIED`).
+- `retry [task_id]`: Retry a failed task by creating a new Jules session. If `task_id` is omitted, it shows a list of tasks in `failed` status.
+  - Unlike `advance`, it does not resume the existing session; it starts a fresh session for the same task.
+  - `--automation-mode <mode>`: Specify the automation mode for the new Jules session.
 - `delete run [run_id]`: Delete a run and its tasks from the local state.
 - `delete task [task_id]`: Delete a specific task from the local state. If the run becomes empty, it is also removed.
 - `rm`: An alias for `delete`.
@@ -141,6 +144,7 @@ stateDiagram-v2
     waiting_human_review --> review_passed: manual pass
     waiting_human_review --> reviewing: new commit
     pr_created --> pr_closed
+    failed --> dispatching: retry
 ```
 
 ### Global Flags
