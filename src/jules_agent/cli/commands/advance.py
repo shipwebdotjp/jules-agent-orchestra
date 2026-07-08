@@ -8,6 +8,7 @@ from ...github import GitHubClient
 from ...models import State
 from .sync import handle_sync
 from ..advance_core import AdvanceEngine
+from ...services.advance_service import AdvanceService, AdvanceOptions
 
 
 def handle_advance(
@@ -25,16 +26,14 @@ def handle_advance(
     if sync_result != 0:
         return sync_result
 
-    engine = AdvanceEngine(
-        state=state,
-        client=client,
-        github_client=github_client,
-        cwd=cwd,
-        config=config,
-        args=args,
+    service = AdvanceService(state, client, github_client, cwd, config)
+    options = AdvanceOptions(
         interactive=True,
+        output_json=getattr(args, "json", False),
+        args=args,
     )
-    return engine.run()
+    result = service.execute(options)
+    return result.exit_code
 
 
 def handle_cron(
@@ -52,13 +51,11 @@ def handle_cron(
     if sync_result != 0:
         return sync_result
 
-    engine = AdvanceEngine(
-        state=state,
-        client=client,
-        github_client=github_client,
-        cwd=cwd,
-        config=config,
-        args=args,
+    service = AdvanceService(state, client, github_client, cwd, config)
+    options = AdvanceOptions(
         interactive=False,
+        output_json=getattr(args, "json", False),
+        args=args,
     )
-    return engine.run()
+    result = service.execute(options)
+    return result.exit_code

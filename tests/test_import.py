@@ -28,8 +28,8 @@ def test_handle_import_success() -> None:
 
     args = argparse.Namespace(session_id="12345")
 
-    with patch("jules_agent.cli.commands.import_command.save_state") as mock_save_state, \
-         patch("jules_agent.cli.commands.import_command.generate_run_id", return_value="run_20240101_001"):
+    with patch("jules_agent.services.import_service.save_state") as mock_save_state, \
+         patch("jules_agent.services.import_service.generate_run_id", return_value="run_20240101_001"):
         result = handle_import(args, state, client, Path("/root"))
 
     assert result == 0
@@ -103,11 +103,12 @@ def test_handle_import_repo_mismatch(capsys) -> None:
 
     args = argparse.Namespace(session_id="sessions/12345")
 
-    with patch("jules_agent.cli.commands.import_command.save_state"), \
-         patch("jules_agent.cli.commands.import_command.generate_run_id", return_value="run-1"):
+    with patch("jules_agent.services.import_service.save_state"), \
+         patch("jules_agent.services.import_service.generate_run_id", return_value="run-1"):
         result = handle_import(args, state, client, Path("/root"))
 
     assert result == 0
+    # The warning message is now passed to options.error_func, which is print(..., file=sys.stderr) in handle_import
     stderr = capsys.readouterr().err
     assert "Warning: Session repository (other/other) does not match local repository (owner/repo)." in stderr
 
@@ -126,8 +127,8 @@ def test_handle_import_prompt_shortening() -> None:
 
     args = argparse.Namespace(session_id="12345")
 
-    with patch("jules_agent.cli.commands.import_command.save_state"), \
-         patch("jules_agent.cli.commands.import_command.generate_run_id", return_value="run-1"):
+    with patch("jules_agent.services.import_service.save_state"), \
+         patch("jules_agent.services.import_service.generate_run_id", return_value="run-1"):
         handle_import(args, state, client, Path("/root"))
 
     run = state.runs[0]
@@ -156,8 +157,8 @@ def test_handle_import_with_pr() -> None:
 
     args = argparse.Namespace(session_id="12345")
 
-    with patch("jules_agent.cli.commands.import_command.save_state"), \
-         patch("jules_agent.cli.commands.import_command.generate_run_id", return_value="run-1"):
+    with patch("jules_agent.services.import_service.save_state"), \
+         patch("jules_agent.services.import_service.generate_run_id", return_value="run-1"):
         handle_import(args, state, client, Path("/root"))
 
     task = state.runs[0].tasks[0]

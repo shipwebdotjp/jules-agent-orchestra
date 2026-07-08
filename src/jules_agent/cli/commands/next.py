@@ -6,10 +6,10 @@ from pathlib import Path
 from ...client import JulesClient
 from ...config import Config
 from ...models import State
-from ...codex import PipelineError
+from ...codex import PipelineError, OperationError
 from ..state import get_candidates
 from ..io import select_task_interactively
-from ..advance_core import dispatch_task
+from ...services.next_service import NextService, NextOptions
 
 
 def handle_next(
@@ -47,5 +47,11 @@ def handle_next(
             return 0
         target_run, next_task = select_task_interactively(candidates, "next")
 
-    dispatch_task(next_task, target_run, state, client, cwd, config, args)
+    service = NextService(state, client, cwd, config)
+    options = NextOptions(run=target_run, task=next_task, args=args)
+
+    result = service.execute(options)
+    if not result.success:
+        raise OperationError(result.exit_code, result.message or "Unknown error")
+
     return 0

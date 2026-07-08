@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
 
 from ...client import JulesClient
 from ...github import GitHubClient
 from ...models import State
-from ...pipeline import perform_task_review
 from ...codex import resolve_tool_for_phase, OperationError
 from ..io import select_task_interactively
 from ..state import get_candidates, resolve_task, sync_task_state
-from typing import Any
+from ...services.review_service import ReviewService, ReviewOptions
 
 
 def handle_review(
@@ -34,14 +34,16 @@ def handle_review(
 
     tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("review", config, args)
 
-    perform_task_review(
+    service = ReviewService(state, client, github_client, cwd)
+    options = ReviewOptions(
         task=task,
-        state=state,
-        github_client=github_client,
-        cwd=cwd,
         tool_name=tool_name,
         tool_bin=tool_bin,
         gemini_skip_trust=gemini_skip_trust,
     )
+
+    result = service.execute(options)
+    if not result.success:
+        raise OperationError(result.exit_code, result.message or "Unknown error")
 
     return 0
