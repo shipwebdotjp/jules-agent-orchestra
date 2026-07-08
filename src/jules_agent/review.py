@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ from .git import CommandRunner, run_command
 from .github import GitHubClient
 from .models import State, Task, TaskReview, TaskReviewAttempt
 from .persistence import save_state
+
+logger = logging.getLogger("jules_agent")
 
 
 def get_review_diff(
@@ -54,7 +57,7 @@ def get_review_diff(
                     full_diff += f"diff --git a/{filename} b/{filename}\n"
                     full_diff += patch + "\n"
         except Exception as e:
-            print(f"Warning: Failed to fetch diff from GitHub for {base}...{head}: {e}")
+            logger.warning(f"Failed to fetch diff from GitHub for {base}...{head}: {e}")
 
     return full_diff
 
@@ -108,7 +111,7 @@ def update_sticky_comment(
             github_client.update_issue_comment(repo, task.review.sticky_comment_id, body)
             return
         except Exception as e:
-            print(f"Warning: Failed to update existing sticky comment: {e}")
+            logger.warning(f"Failed to update existing sticky comment: {e}")
 
     # Create new comment
     try:
@@ -118,7 +121,7 @@ def update_sticky_comment(
         task.review.sticky_comment_id = comment.get("id")
         task.review.sticky_comment_url = comment.get("html_url")
     except Exception as e:
-        print(f"Warning: Failed to post sticky comment: {e}")
+        logger.warning(f"Failed to post sticky comment: {e}")
         raise
 
 
@@ -176,7 +179,7 @@ def apply_review_result(
         try:
             github_client.post_issue_comment(repo, issue_number, fix_msg)
         except Exception as e:
-            print(f"Warning: Failed to post fix request comment: {e}")
+            logger.warning(f"Failed to post fix request comment: {e}")
             raise
     if task.attempts >= task.max_attempts and task.status != "review_passed":
         task.status = "waiting_human_review"

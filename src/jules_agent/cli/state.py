@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import datetime
-import sys
+import logging
+import re
 from pathlib import Path
 
 from ..client import JulesClient
@@ -17,7 +18,8 @@ from ..models import (
     gitPatchInfo,
 )
 from ..codex import PipelineError
-from ..utils import extract_pull_request_number
+
+logger = logging.getLogger("jules_agent")
 
 
 def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
@@ -47,6 +49,18 @@ def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
     return candidates[0]
 
 
+PULL_REQUEST_NUMBER_RE = re.compile(r"/pulls?/(\d+)(?:[/?#]|$)")
+
+
+def extract_pull_request_number(url: str | None) -> int | None:
+    if not url:
+        return None
+
+    match = PULL_REQUEST_NUMBER_RE.search(url)
+    if not match:
+        return None
+
+    return int(match.group(1))
 
 
 def sync_pr_created_task(
@@ -55,28 +69,21 @@ def sync_pr_created_task(
     task: Task,
 ) -> bool:
     if not task.pull_request or not task.pull_request.url:
-        print(
-            f"Warning: Task {task.id} is pr_created but has no pull request URL.",
-            file=sys.stderr,
-        )
+        logger.warning(f"Task {task.id} is pr_created but has no pull request URL.")
         return False
 
     pull_number = extract_pull_request_number(task.pull_request.url)
     if pull_number is None:
-        print(
-            "Warning: Could not parse pull request number from "
-            f"{task.pull_request.url!r} for task {task.id}.",
-            file=sys.stderr,
+        logger.warning(
+            "Could not parse pull request number from "
+            f"{task.pull_request.url!r} for task {task.id}."
         )
         return False
 
     try:
         pull_request = github_client.get_pull_request(repo, pull_number)
     except Exception as exc:
-        print(
-            f"Warning: Failed to fetch PR details for task {task.id}: {exc}",
-            file=sys.stderr,
-        )
+        logger.warning(f"Failed to fetch PR details for task {task.id}: {exc}")
         return False
 
     state = pull_request.get("state")
@@ -92,10 +99,7 @@ def sync_pr_created_task(
         )
         return True
 
-    print(
-        f"Warning: Unexpected PR state {state!r} for task {task.id}.",
-        file=sys.stderr,
-    )
+    logger.warning(f"Unexpected PR state {state!r} for task {task.id}.")
     return False
 
 
@@ -145,10 +149,7 @@ def sync_task(client: JulesClient, task: Task) -> bool:
         try:
             task.jules.activities = list(client.list_activities(task.jules.session_name))
         except Exception as e:
-            print(
-                f"Warning: Failed to fetch activities for task {task.id}: {e}",
-                file=sys.stderr,
-            )
+            logger.warning(f"Failed to fetch activities for task {task.id}: {e}")
 
         has_pr = False
         outputs = session.get("outputs", [])
@@ -190,7 +191,7 @@ def sync_task(client: JulesClient, task: Task) -> bool:
                 )
         return True
     except Exception as e:
-        print(f"Failed to sync task {task.id}: {e}", file=sys.stderr)
+        logger.error(f"Failed to sync task {task.id}: {e}")
         return False
 
 
@@ -232,30 +233,23 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
             elif command == "delete task":
                 eligible = True
             elif command == "next":
-                # For 'next', we want the first 'planned' task of a running sequential run.
-                # Since get_candidates iterates over all tasks, we need to be careful.
-                # We only want to return the FIRST planned task for each eligible run.
+                # For 'next', we want the first 'planned' task of a running sequential run
+                # if all prior tasks are terminal (merged or completed).
                 if (
                     run.strategy == "sequential_subtasks"
                     and run.status == "running"
                     and task.status == "planned"
                 ):
-                    # Check if this is the first planned task in this run
-                    first_planned = None
+                    prior_done = True
                     for t in run.tasks:
-                        if t.status == "planned":
-                            first_planned = t
+                        if t.id == task.id:
                             break
-                    if first_planned and first_planned.id == task.id:
-                        # All earlier tasks must be terminal (completed/merged)
-                        # before dispatching the next one in a sequential run.
+                        if t.status not in ("completed", "merged"):
+                            prior_done = False
+                            break
+
+                    if prior_done:
                         eligible = True
-                        for t in run.tasks:
-                            if t.id == first_planned.id:
-                                break
-                            if t.status not in ("completed", "merged"):
-                                eligible = False
-                                break
 
             if eligible:
                 candidates.append((run, task))

@@ -10,8 +10,8 @@ from ...github import GitHubClient
 from ...models import State, TaskReview
 from ...persistence import save_state
 from ..io import select_task_interactively
-from ..state import get_candidates, resolve_task, sync_task_state
-from ...utils import extract_pull_request_number
+from ..state import get_candidates, resolve_task, sync_task_state, extract_pull_request_number
+from ...codex import OperationError
 
 
 def handle_review_pass(
@@ -20,11 +20,10 @@ def handle_review_pass(
     client: JulesClient,
     github_client: GitHubClient | None,
     cwd: Path,
-    parser: argparse.ArgumentParser,
     config: Any = None,
 ) -> int:
     if not github_client:
-        parser.exit(1, "Error: GITHUB_TOKEN is required for review-pass.\n")
+        raise OperationError(1, "Error: GITHUB_TOKEN is required for review-pass.")
 
     if args.task_id:
         run, task = resolve_task(state, args.task_id)
@@ -42,18 +41,18 @@ def handle_review_pass(
         return 0
 
     if not task.pull_request or not task.pull_request.url:
-         parser.exit(1, f"Error: Task {task.id} has no pull request.\n")
+         raise OperationError(1, f"Error: Task {task.id} has no pull request.")
 
     pull_number = extract_pull_request_number(task.pull_request.url)
     if not pull_number:
-         parser.exit(1, f"Error: Could not extract PR number from {task.pull_request.url}\n")
+         raise OperationError(1, f"Error: Could not extract PR number from {task.pull_request.url}")
 
     repo = state.project.repo
     pr_data = github_client.get_pull_request(repo, pull_number)
     head_sha = pr_data.get("head", {}).get("sha")
 
     if not head_sha:
-         parser.exit(1, "Error: Could not determine current head SHA.\n")
+         raise OperationError(1, "Error: Could not determine current head SHA.")
 
     if not task.review:
         task.review = TaskReview()

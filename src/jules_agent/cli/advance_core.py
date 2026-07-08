@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import logging
 try:
     import fcntl
 except ImportError:
@@ -20,11 +21,13 @@ from ..git import get_git_branch
 from .state import (
     get_candidates,
     sync_task,
+    extract_pull_request_number,
     get_jules_state_mapping,
     sync_task_state,
 )
-from ..utils import extract_pull_request_number
 from ..codex import resolve_tool_for_phase
+
+logger = logging.getLogger("jules_agent")
 
 
 def dispatch_task(
@@ -69,7 +72,7 @@ def dispatch_task(
     except Exception as e:
         task.status = "failed"
         if verbose:
-            print(f"  Failed: {e}", file=sys.stderr)
+            logger.error(f"  Failed: {e}")
 
     task.updated_at = (
         datetime.datetime.now(datetime.timezone.utc)
@@ -394,19 +397,7 @@ class AdvanceEngine:
             planned_candidates = get_candidates(self.state, "next")
             if not planned_candidates:
                 return None
-            # Defense in depth: ensure all prior tasks in the run are
-            # terminal (completed/merged) before dispatching the next.
-            run, task = planned_candidates[0]
-            prior_done = True
-            for t in run.tasks:
-                if t.id == task.id:
-                    break
-                if t.status not in ("completed", "merged"):
-                    prior_done = False
-                    break
-            if not prior_done:
-                return None
-            return run, task
+            return planned_candidates[0]
 
         # Sort by updated_at (descending) then traversal order (ascending)
         # Using -index for ascending order when reverse=True
@@ -421,19 +412,20 @@ class AdvanceEngine:
         next_task = None
         for task in run.tasks:
             if task.status == "planned":
-                next_task = task
+                # Ensure all prior tasks are terminal
+                prior_done = True
+                for t in run.tasks:
+                    if t.id == task.id:
+                        break
+                    if t.status not in ("completed", "merged"):
+                        prior_done = False
+                        break
+                if prior_done:
+                    next_task = task
                 break
 
         if not next_task:
             return
-
-        # Defense in depth: only dispatch when all earlier tasks are
-        # terminal (completed/merged) to keep sequential execution strict.
-        for t in run.tasks:
-            if t.id == next_task.id:
-                break
-            if t.status not in ("completed", "merged"):
-                return
 
         dispatch_task(
             task=next_task,

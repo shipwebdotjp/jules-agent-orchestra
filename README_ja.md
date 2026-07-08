@@ -89,9 +89,9 @@ jules-agent [flags] <command> [args]
   - `--show-activities`: 各 task の session activity を詳細表示する
 - `sync`: ローカル state を Jules API と GitHub に同期する（PR 状態の更新を含む）
 - `advance [flags]`: 次の active task に対して、作業を自動または対話的に進める
-  - `sequential_subtasks` では、前の task が `completed`/`merged` になった後にのみ、同じ run の次の `planned` task を送信する
+  - `sequential_subtasks` では、マージ成功後に同じ run の次の `planned` task も送信する
 - `cron [flags]`: 非対話のバックグラウンド実行。`advance` の完全自動版で、入力は一切求めない
-  - `sequential_subtasks` の前の task が `completed`/`merged` になった後にのみ、次の `planned` task を送信する
+  - `sequential_subtasks` のマージ成功後に、次の `planned` task も送信する
 - `approve [task_id]`: 特定 task の提案された計画を手動承認する
   - `task_id` を省略すると、plan 承認待ちの task 一覧を表示する
 - `send [task_id] message`: task の Jules セッションに手動メッセージを送る
@@ -105,7 +105,6 @@ jules-agent [flags] <command> [args]
 - `merge [task_id]`: task に紐づく pull request を手動でマージする
   - `task_id` を省略すると、オープンな pull request を持つ task 一覧を表示する
 - `next [run_id]`: sequential run の次の task を送信する
-  - 前の task がすべて `completed`/`merged` になっている必要がある
   - `run_id` を省略すると、`planned` task を持つ active な sequential run 一覧を表示する
   - `--automation-mode <mode>`: Jules セッションの automation mode を指定する（例: `AUTO_CREATE_PR` または `AUTOMATION_MODE_UNSPECIFIED`）
 - `delete run [run_id]`: 指定した run とその配下の task をローカル state から削除する

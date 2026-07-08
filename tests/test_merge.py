@@ -70,9 +70,7 @@ def test_handle_merge_success(state, tmp_path):
     github_client = GitHubClient(token="test-token")
 
     # We need a parser that doesn't actually exit the process
-    parser = argparse.ArgumentParser()
-
-    result = handle_merge(args, state, None, github_client, tmp_path, config, parser)
+    result = handle_merge(args, state, None, github_client, tmp_path, config)
 
     assert result == 0
     assert state.runs[0].tasks[0].status == "merged"
@@ -93,9 +91,8 @@ def test_handle_merge_needs_fix_status(state, tmp_path):
     args = argparse.Namespace(task_id="run_1:task_3", merge_method=None)
     config = Config()
     github_client = GitHubClient(token="test-token")
-    parser = argparse.ArgumentParser()
 
-    result = handle_merge(args, state, None, github_client, tmp_path, config, parser)
+    result = handle_merge(args, state, None, github_client, tmp_path, config)
 
     assert result == 0
     assert state.runs[0].tasks[2].status == "merged"
@@ -114,14 +111,9 @@ def test_handle_merge_not_mergeable(state, tmp_path):
     config = Config()
     github_client = GitHubClient(token="test-token")
 
-    parser = argparse.ArgumentParser()
-    # Mock parser.exit to raise an exception instead of exiting
-    def mock_exit(status=0, message=None):
-        raise SystemExit(message)
-    parser.exit = mock_exit
-
-    with pytest.raises(SystemExit) as excinfo:
-        handle_merge(args, state, None, github_client, tmp_path, config, parser)
+    from jules_agent.codex import OperationError
+    with pytest.raises(OperationError) as excinfo:
+        handle_merge(args, state, None, github_client, tmp_path, config)
 
     assert "not mergeable" in str(excinfo.value)
     assert state.runs[0].tasks[0].status == "pr_created"
@@ -132,13 +124,9 @@ def test_handle_merge_wrong_status(state, tmp_path):
     config = Config()
     github_client = GitHubClient(token="test-token")
 
-    parser = argparse.ArgumentParser()
-    def mock_exit(status=0, message=None):
-        raise SystemExit(message)
-    parser.exit = mock_exit
-
-    with pytest.raises(SystemExit) as excinfo:
-        handle_merge(args, state, None, github_client, tmp_path, config, parser)
+    from jules_agent.codex import OperationError
+    with pytest.raises(OperationError) as excinfo:
+        handle_merge(args, state, None, github_client, tmp_path, config)
 
     assert "required to merge" in str(excinfo.value)
 
@@ -167,9 +155,7 @@ def test_handle_merge_no_task_id_calls_sync(state, tmp_path, mocker):
         return_value=httpx.Response(200, json={"merged": True})
     )
 
-    parser = argparse.ArgumentParser()
-
-    result = handle_merge(args, state, None, github_client, tmp_path, config, parser)
+    result = handle_merge(args, state, None, github_client, tmp_path, config)
 
     assert result == 0
     mock_sync.assert_called_once_with(args, state, None, github_client, tmp_path)

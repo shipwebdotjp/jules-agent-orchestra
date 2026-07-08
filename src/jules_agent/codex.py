@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import json
+import logging
 import re
 import shlex
 import sys
@@ -12,9 +13,18 @@ from typing import Any
 
 from .git import CommandRunner, is_git_repo, run_command
 
+logger = logging.getLogger("jules_agent")
+
 
 class PipelineError(RuntimeError):
     pass
+
+
+class OperationError(PipelineError):
+    def __init__(self, exit_code: int, message: str):
+        super().__init__(message)
+        self.exit_code = exit_code
+        self.message = message
 
 
 def display_tool_name(tool_name: str | None) -> str:
@@ -36,23 +46,16 @@ class SelectionCancelled(Exception):
     pass
 
 
-DEBUG_ENABLED = False
-
-
 def set_debug(enabled: bool) -> None:
-    global DEBUG_ENABLED
-    DEBUG_ENABLED = enabled
+    if enabled:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
 
 
 def debug_command(args: list[str], cwd: Path, *, label: str | None = None) -> None:
-    if not DEBUG_ENABLED:
-        return
     prefix = "DEBUG" if label is None else f"DEBUG[{label}]"
-    print(
-        f"{prefix}: running command (cwd={cwd}): {shlex.join(args)}",
-        file=sys.stderr,
-        flush=True,
-    )
+    logger.debug(f"{prefix}: running command (cwd={cwd}): {shlex.join(args)}")
 
 
 class BackendAdapter(abc.ABC):

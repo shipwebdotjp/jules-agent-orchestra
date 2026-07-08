@@ -11,7 +11,7 @@ from ...models import State, Task
 from ...pipeline import (
     suggest_reply,
 )
-from ...codex import PipelineError, display_tool_name, resolve_tool_for_phase
+from ...codex import PipelineError, OperationError, display_tool_name, resolve_tool_for_phase
 from ...git import CommandRunner, run_command
 from ...persistence import save_state
 from ..io import select_task_interactively
@@ -204,7 +204,6 @@ def handle_feedback(
     state: State,
     client: JulesClient,
     cwd: Path,
-    parser: argparse.ArgumentParser,
     config: Any = None,
 ) -> int:
     if args.task_id:
@@ -216,8 +215,8 @@ def handle_feedback(
         task_id_for_print = f"{_run.id}:{task.id}"
 
     if not task.jules:
-        parser.exit(
-            1, f"Error: Task {task_id_for_print} has not been dispatched yet.\n"
+        raise OperationError(
+            1, f"Error: Task {task_id_for_print} has not been dispatched yet."
         )
 
     is_awaiting_plan_approval = task.status == "awaiting_plan_approval"

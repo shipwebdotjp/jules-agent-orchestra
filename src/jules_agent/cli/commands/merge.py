@@ -11,9 +11,9 @@ from ...models import State
 from ...persistence import save_state
 from ...git import run_command, get_git_branch
 from ..io import select_task_interactively
-from ..state import get_candidates, resolve_task, sync_task_state
-from ...utils import extract_pull_request_number
+from ..state import get_candidates, resolve_task, extract_pull_request_number, sync_task_state
 from .sync import handle_sync
+from ...codex import OperationError
 
 
 def handle_merge(
@@ -23,10 +23,9 @@ def handle_merge(
     github_client: GitHubClient | None,
     cwd: Path,
     config: Config,
-    parser: argparse.ArgumentParser,
 ) -> int:
     if not github_client:
-        parser.exit(1, "Error: GITHUB_TOKEN is not set. Merging requires GitHub access.\n")
+        raise OperationError(1, "Error: GITHUB_TOKEN is not set. Merging requires GitHub access.")
 
     if args.task_id:
         run, task = resolve_task(state, args.task_id)
@@ -42,14 +41,14 @@ def handle_merge(
     sync_task_state(client, github_client, state, run, task, cwd)
 
     if task.status not in ("pr_created", "waiting_human_review", "needs_fix"):
-        parser.exit(1, f"Error: Task {task_id_for_print} is in status {task.status!r}, but 'pr_created', 'waiting_human_review', or 'needs_fix' is required to merge.\n")
+        raise OperationError(1, f"Error: Task {task_id_for_print} is in status {task.status!r}, but 'pr_created', 'waiting_human_review', or 'needs_fix' is required to merge.")
 
     if not task.pull_request or not task.pull_request.url:
-        parser.exit(1, f"Error: Task {task_id_for_print} does not have an associated pull request URL.\n")
+        raise OperationError(1, f"Error: Task {task_id_for_print} does not have an associated pull request URL.")
 
     pull_number = extract_pull_request_number(task.pull_request.url)
     if pull_number is None:
-        parser.exit(1, f"Error: Could not extract pull request number from {task.pull_request.url}.\n")
+        raise OperationError(1, f"Error: Could not extract pull request number from {task.pull_request.url}.")
 
     repo = state.project.repo
     print(f"Checking mergeability for PR #{pull_number} in {repo}...")
@@ -57,10 +56,10 @@ def handle_merge(
     try:
         pr_details = github_client.get_pull_request(repo, pull_number)
     except Exception as e:
-        parser.exit(1, f"Error: Failed to fetch PR details: {e}\n")
+        raise OperationError(1, f"Error: Failed to fetch PR details: {e}")
 
     if not pr_details.get("mergeable"):
-        parser.exit(1, f"Error: PR #{pull_number} is not mergeable at this time.\n")
+        raise OperationError(1, f"Error: PR #{pull_number} is not mergeable at this time.")
 
     merge_method = args.merge_method or config.merge_method or "merge"
 
@@ -68,7 +67,7 @@ def handle_merge(
     try:
         github_client.merge_pull_request(repo, pull_number, merge_method=merge_method)
     except Exception as e:
-        parser.exit(1, f"Error: Failed to merge PR: {e}\n")
+        raise OperationError(1, f"Error: Failed to merge PR: {e}")
 
     task.status = "merged"
     task.updated_at = (
