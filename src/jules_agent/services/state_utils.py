@@ -260,6 +260,45 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
     return candidates
 
 
+def perform_task_sync_logic(
+    client: JulesClient,
+    github_client: GitHubClient | None,
+    repo: str,
+    task: Task,
+    skip_pr_sync: bool = False,
+) -> bool:
+    """
+    Encapsulates the decision logic for syncing a single task from Jules and/or GitHub.
+    Returns True if the task status or other details were modified.
+    """
+    updated = False
+
+    # 1. Sync from Jules if in an active non-PR state
+    if (
+        task.status not in (
+            "completed",
+            "merged",
+            "failed",
+            "cancelled",
+            "pr_closed",
+        )
+        and task.status not in PR_SYNC_STATUSES
+    ):
+        if sync_task(client, task):
+            updated = True
+
+    # 2. Sync from GitHub if in a PR-related state
+    if (
+        task.status in PR_SYNC_STATUSES
+        and not skip_pr_sync
+        and github_client
+    ):
+        if sync_pr_created_task(github_client, repo, task):
+            updated = True
+
+    return updated
+
+
 def sync_task_state(
     client: JulesClient,
     github_client: GitHubClient | None,
@@ -274,31 +313,19 @@ def sync_task_state(
     """
     from ..persistence import save_state
 
-    updated = False
     previous_run_status = run.status
     task_initial_status = task.status
 
-    if (
-        task.status
-        not in (
-            "completed",
-            "merged",
-            "failed",
-            "cancelled",
-            "pr_closed",
-        )
-        and task.status not in PR_SYNC_STATUSES
-    ):
-        sync_task(client, task)
+    updated = perform_task_sync_logic(
+        client,
+        github_client,
+        state.project.repo,
+        task,
+        skip_pr_sync=False
+    )
 
-    if task.status in PR_SYNC_STATUSES and github_client:
-        if sync_pr_created_task(github_client, state.project.repo, task):
-            updated = True
-
-    if task.status != task_initial_status:
+    if updated or task.status != task_initial_status:
         updated = True
-
-    if updated:
         reopened_from_completed = previous_run_status == "completed"
         run.status = get_run_sync_status(
             run,

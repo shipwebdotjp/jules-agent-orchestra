@@ -10,8 +10,7 @@ from ..models import PR_SYNC_STATUSES, State
 from ..persistence import save_state
 from .state_utils import (
     get_run_sync_status,
-    sync_pr_created_task,
-    sync_task,
+    perform_task_sync_logic,
 )
 from .options import SyncOptions
 from .results import OperationResult
@@ -63,32 +62,14 @@ class SyncService:
 
                 for task in run.tasks:
                     task_initial_status = task.status
-                    task_updated = False
-                    if (
-                        task.status
-                        not in (
-                            "completed",
-                            "merged",
-                            "failed",
-                            "cancelled",
-                            "pr_closed",
-                        )
-                        and task.status not in PR_SYNC_STATUSES
-                    ):
-                        if sync_task(self.client, task):
-                            task_updated = True
 
-                    if (
-                        task.status in PR_SYNC_STATUSES
-                        and not options.skip_pr_sync
-                        and self.github_client
-                    ):
-                        if sync_pr_created_task(
-                            self.github_client,
-                            self.state.project.repo,
-                            task,
-                        ):
-                            task_updated = True
+                    task_updated = perform_task_sync_logic(
+                        self.client,
+                        self.github_client,
+                        self.state.project.repo,
+                        task,
+                        skip_pr_sync=options.skip_pr_sync
+                    )
 
                     if task_updated and task.status != task_initial_status:
                         updated_count += 1

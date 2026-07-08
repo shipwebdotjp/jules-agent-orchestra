@@ -41,7 +41,7 @@ def handle_delete_run(
         except SelectionCancelled:
             return 0
         except PipelineError as e:
-            raise OperationError(1, str(e))
+            raise OperationError(1, str(e)) from e
 
     options = DeleteOptions(
         target_run=target_run,
@@ -73,7 +73,7 @@ def handle_delete_task(
         try:
             target_run, target_task = resolve_task(state, task_id_arg)
         except PipelineError as e:
-            raise OperationError(1, str(e))
+            raise OperationError(1, str(e)) from e
     else:
         candidates = get_candidates(state, "delete task")
         try:
@@ -81,7 +81,7 @@ def handle_delete_task(
         except SelectionCancelled:
             return 0
         except PipelineError as e:
-            raise OperationError(1, str(e))
+            raise OperationError(1, str(e)) from e
 
     options = DeleteOptions(
         target_run=target_run,
