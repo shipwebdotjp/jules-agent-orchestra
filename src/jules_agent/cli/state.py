@@ -189,7 +189,7 @@ def sync_task(client: JulesClient, task: Task) -> bool:
             # Prevent status regression: if we are already in a post-PR state,
             # don't go back to pr_created even if Jules says COMPLETED.
             if (
-                task.status in ("waiting_human_review", "codex_reviewing", "needs_fix")
+                task.status in ("reviewing", "review_passed", "needs_fix", "waiting_human_review")
                 and new_status == "pr_created"
             ):
                 pass
@@ -226,9 +226,18 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
                     "failed",
                     "cancelled",
                 )
-            elif command in ("review", "merge"):
+            elif command == "review":
                 eligible = task.pull_request is not None and task.status in (
                     "pr_created",
+                    "reviewing",
+                    "review_passed",
+                    "needs_fix",
+                    "waiting_human_review",
+                )
+            elif command == "merge":
+                eligible = task.pull_request is not None and task.status in (
+                    "pr_created",
+                    "review_passed",
                     "waiting_human_review",
                     "needs_fix",
                 )

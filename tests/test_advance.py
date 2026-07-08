@@ -250,7 +250,7 @@ def test_handle_advance_dispatches_next_after_merge(
     task1 = Task(
         id="1",
         title="T1",
-        status="pr_created",
+        status="review_passed",
         created_at=now,
         updated_at=now,
     )

@@ -162,6 +162,7 @@ class AdvanceEngine:
         auto_plan_approval = getattr(self.config, "auto_plan_approval", True)
         auto_feedback = getattr(self.config, "auto_feedback", False)
         auto_merge = getattr(self.config, "auto_merge", False)
+        skip_review = getattr(self.config, "skip_review", False)
 
         # 2. Apply --auto
         if getattr(self.args, "auto", False):
@@ -175,6 +176,8 @@ class AdvanceEngine:
             auto_feedback = self.args.auto_feedback
         if getattr(self.args, "auto_merge", None) is not None:
             auto_merge = self.args.auto_merge
+        if getattr(self.args, "skip_review", None) is not None:
+            skip_review = self.args.skip_review
 
         action_taken = False
         action_name = None
@@ -218,33 +221,115 @@ class AdvanceEngine:
                     action_name = "feedback_failed"
                     exit_code = 2
 
-            elif target_task.status in ("pr_created", "waiting_human_review"):
-                # Sync before attempting merge to ensure we have latest PR state
-                sync_task_state(self.client, self.github_client, self.state, target_run, target_task, self.cwd)
+            elif target_task.status in (
+                "pr_created",
+                "reviewing",
+                "review_passed",
+                "needs_fix",
+                "waiting_human_review",
+            ):
+                # Sync before attempting anything to ensure we have latest PR state
+                sync_task_state(
+                    self.client,
+                    self.github_client,
+                    self.state,
+                    target_run,
+                    target_task,
+                    self.cwd,
+                )
 
                 if target_task.status == "merged":
                     action_taken = True
                     action_name = "already_merged"
-                elif auto_merge:
-                    merge_result = self._attempt_merge(target_task)
-                    if merge_result is True:
+                    return 0
+
+                # Check for SHA change and reset if necessary
+                if target_task.pull_request and self.github_client:
+                    pull_number = extract_pull_request_number(target_task.pull_request.url)
+                    if pull_number:
+                        pr_data = self.github_client.get_pull_request(
+                            self.state.project.repo, pull_number
+                        )
+                        head_sha = pr_data.get("head", {}).get("sha")
+                        if head_sha:
+                            # Detect if re-review is needed
+                            needs_re_review = False
+                            if target_task.status == "review_passed":
+                                if (
+                                    not target_task.review
+                                    or target_task.review.passed_head_sha != head_sha
+                                ):
+                                    needs_re_review = True
+                            elif target_task.status in ("needs_fix", "waiting_human_review"):
+                                if target_task.review and target_task.review.attempts:
+                                    last_reviewed_sha = target_task.review.attempts[-1].head_sha
+                                    if last_reviewed_sha != head_sha:
+                                        needs_re_review = True
+
+                            if needs_re_review:
+                                target_task.status = "reviewing"
+                                target_task.attempts = 0
+                                action_taken = True
+                                action_name = "re_review_triggered"
+
+                # Review loop
+                if (target_task.status == "pr_created" and not skip_review) or target_task.status == "reviewing":
+                    from ..pipeline import perform_task_review
+
+                    tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase(
+                        "review", self.config, self.args
+                    )
+                    try:
+                        perform_task_review(
+                            task=target_task,
+                            state=self.state,
+                            github_client=self.github_client,
+                            cwd=self.cwd,
+                            tool_name=tool_name,
+                            tool_bin=tool_bin,
+                            gemini_skip_trust=gemini_skip_trust,
+                        )
                         action_taken = True
-                        action_name = "merged"
-                    elif merge_result is False:
-                        action_name = "merge_failed"
+                        action_name = "reviewed"
+                    except Exception as e:
+                        action_name = "review_failed"
+                        reason = str(e)
                         if not self.interactive:
                             target_task.status = "blocked"
                             action_taken = True
-                            reason = "Merge conditions not met"
-                    else: # Transient error (should be handled by exception, but just in case)
-                        action_name = "merge_error"
-                        exit_code = 2
-                else:
-                    action_name = "manual_merge_required"
-                    if not self.interactive:
-                        target_task.status = "blocked"
-                        action_taken = True
-                        reason = "Auto-merge disabled"
+                        else:
+                            exit_code = 2
+
+                # Merge loop
+                if target_task.status in (
+                    "pr_created",
+                    "review_passed",
+                    "waiting_human_review",
+                ):
+                    if auto_merge:
+                        merge_result = self._attempt_merge(target_task, skip_review=skip_review)
+                        if merge_result is True:
+                            action_taken = True
+                            action_name = "merged"
+                        elif merge_result is False:
+                            action_name = "merge_failed"
+                            if (
+                                not self.interactive
+                                and target_task.status != "review_passed"
+                                and not skip_review
+                            ):
+                                target_task.status = "blocked"
+                                action_taken = True
+                                reason = "Merge conditions not met"
+                        else:  # Transient error
+                            action_name = "merge_error"
+                            exit_code = 2
+                    else:
+                        if not self.interactive and target_task.status == "review_passed":
+                            target_task.status = "blocked"
+                            action_taken = True
+                            action_name = "manual_merge_required"
+                            reason = "Auto-merge disabled"
 
         except Exception as e:
             action_name = "error"
@@ -291,6 +376,9 @@ class AdvanceEngine:
             "awaiting_plan_approval",
             "awaiting_user_feedback",
             "pr_created",
+            "reviewing",
+            "review_passed",
+            "needs_fix",
             "waiting_human_review",
         }
 
@@ -338,7 +426,7 @@ class AdvanceEngine:
             verbose=not self.output_json,
         )
 
-    def _attempt_merge(self, task: Task) -> bool | None:
+    def _attempt_merge(self, task: Task, skip_review: bool = False) -> bool | None:
         if not self.github_client:
             if not self.output_json:
                 print(f"Skipping merge for {task.id}: GITHUB_TOKEN not set.")
@@ -351,7 +439,9 @@ class AdvanceEngine:
         repo = self.state.project.repo
         if f"github.com/{repo}/" not in task.pull_request.url:
             if not self.output_json:
-                print(f"Skipping merge for {task.id}: PR URL {task.pull_request.url} does not match repo {repo}.")
+                print(
+                    f"Skipping merge for {task.id}: PR URL {task.pull_request.url} does not match repo {repo}."
+                )
             return False
 
         pull_number = extract_pull_request_number(task.pull_request.url)
@@ -374,7 +464,24 @@ class AdvanceEngine:
         if not pr.get("mergeable"):
             return False
 
-        merge_method = getattr(self.args, "merge_method", None) or self.config.merge_method or "merge"
+        # Review gate
+        head_sha = pr.get("head", {}).get("sha")
+        can_merge = False
+
+        if task.status == "review_passed":
+            if task.review and task.review.passed_head_sha == head_sha:
+                can_merge = True
+
+        if not can_merge and skip_review:
+            if task.status in ("pr_created", "waiting_human_review"):
+                can_merge = True
+
+        if not can_merge:
+            return False
+
+        merge_method = (
+            getattr(self.args, "merge_method", None) or self.config.merge_method or "merge"
+        )
 
         try:
             self.github_client.merge_pull_request(repo, pull_number, merge_method=merge_method)

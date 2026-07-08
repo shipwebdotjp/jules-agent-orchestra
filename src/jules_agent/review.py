@@ -149,7 +149,10 @@ def apply_review_result(
         task.review = TaskReview()
     task.review.attempts.append(attempt)
 
-    if status == "changes_requested":
+    if status == "pass":
+        task.status = "review_passed"
+        task.review.passed_head_sha = head_sha
+    elif status == "changes_requested":
         task.status = "needs_fix"
         lines = [
             f"@jules\n\n",
@@ -175,7 +178,7 @@ def apply_review_result(
         except Exception as e:
             print(f"Warning: Failed to post fix request comment: {e}")
             raise
-    else:
+    if task.attempts >= task.max_attempts and task.status != "review_passed":
         task.status = "waiting_human_review"
 
     task.updated_at = (
@@ -194,20 +197,20 @@ def is_task_eligible_for_review(
     if pull_request_data.get("draft"):
         return False, "Pull request is a draft."
 
-    if task.status in ("codex_reviewing", "jules_fixing"):
-        return False, f"Task is already in {task.status} status."
-
     current_head_sha = pull_request_data.get("head", {}).get("sha")
     if not current_head_sha:
         return False, "Could not determine current head SHA."
 
     if task.review:
+        if task.review.passed_head_sha == current_head_sha:
+            return False, f"Head SHA {current_head_sha} has already passed review."
+
         seen_shas = {a.head_sha for a in task.review.attempts}
         if current_head_sha in seen_shas:
             return False, f"Head SHA {current_head_sha} has already been reviewed."
 
     if task.attempts >= task.max_attempts:
-        return False, f"Task has reached maximum review attempts ({task.max_attempts})."
+        return False, f"Task has reached maximum review attempts ({task.max_attempts}) for this SHA."
 
     return True, None
 

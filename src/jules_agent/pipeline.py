@@ -709,7 +709,7 @@ def perform_task_review(
 
     print(f"Calling {tool_label} for review of task {task.id}...")
     prev_status = task.status
-    task.status = "codex_reviewing"
+    task.status = "reviewing"
     save_state(cwd, state)
 
     try:

@@ -7,16 +7,35 @@ from jules_agent.models import Task, TaskReview, TaskReviewAttempt
 from jules_agent.pipeline import is_task_eligible_for_review, update_sticky_comment, format_review_sticky_comment, get_review_diff
 from jules_agent.cli import build_parser
 
-def test_legacy_reviewing_mapping():
-    data = {
-        "id": "t1",
-        "title": "Task 1",
-        "status": "reviewing",
-        "created_at": "2024-01-01T00:00:00Z",
-        "updated_at": "2024-01-01T00:00:00Z"
-    }
-    task = Task.from_dict(data)
-    assert task.status == "codex_reviewing"
+def test_review_passed_serialization():
+    attempt = TaskReviewAttempt(
+        head_sha="abc",
+        created_at="2024-01-01T00:00:00Z",
+        status="pass",
+        summary="Looks good",
+        next_steps="Merge it"
+    )
+    review = TaskReview(
+        sticky_comment_id=123,
+        sticky_comment_url="http://gh.com/123",
+        passed_head_sha="abc",
+        attempts=[attempt]
+    )
+    task = Task(
+        id="t1",
+        title="Task 1",
+        status="review_passed",
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        review=review
+    )
+
+    serialized = task.to_dict()
+    assert serialized["review"]["passed_head_sha"] == "abc"
+
+    deserialized = Task.from_dict(serialized)
+    assert deserialized.review.passed_head_sha == "abc"
+    assert deserialized.status == "review_passed"
 
 def test_task_serialization_with_review():
     attempt = TaskReviewAttempt(
@@ -76,12 +95,8 @@ def test_eligibility():
     assert not eligible
     assert "draft" in reason
 
-    # Already reviewing
+    # Already reviewing (status check removed from eligible as AdvanceEngine handles it)
     pr_data["draft"] = False
-    task.status = "codex_reviewing"
-    eligible, reason = is_task_eligible_for_review(task, pr_data)
-    assert not eligible
-    assert "already in codex_reviewing" in reason
 
     # Seen SHA
     task.status = "pr_created"
@@ -99,6 +114,13 @@ def test_eligibility():
     eligible, reason = is_task_eligible_for_review(task, pr_data)
     assert not eligible
     assert "maximum review attempts" in reason
+
+    # Already passed
+    pr_data["head"]["sha"] = "sha3"
+    task.review.passed_head_sha = "sha3"
+    eligible, reason = is_task_eligible_for_review(task, pr_data)
+    assert not eligible
+    assert "already passed review" in reason
 
 def test_sticky_comment_update():
     github_client = MagicMock()
