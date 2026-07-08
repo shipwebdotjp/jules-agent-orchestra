@@ -12,7 +12,7 @@ from ..pipeline import suggest_reply
 from ..codex import PipelineError, display_tool_name
 from ..git import CommandRunner, run_command
 from ..persistence import save_state
-from ..cli.state import sync_task
+from .state_utils import sync_task
 from .options import Options
 from .results import OperationResult
 
@@ -115,6 +115,7 @@ class FeedbackService:
                         self.client.approve_plan(task.jules.session_name)
                         task.status = "plan_approved"
                         mark_advanced("approve_plan")
+                        self._update_task_and_save(task)
                         return OperationResult(exit_code=0, data="completed")
                     else:
                         if options.interactive:
@@ -129,6 +130,7 @@ class FeedbackService:
                         output(f"Sending auto-reply:\n{suggestion}")
                     self.client.send_message(task.jules.session_name, suggestion)
                     mark_advanced("send_message", suggestion_hash)
+                    self._update_task_and_save(task)
                     return OperationResult(exit_code=0, data="completed")
 
                 first_iteration = False
@@ -172,6 +174,7 @@ class FeedbackService:
                         output("Sending message to Jules...")
                         self.client.send_message(task.jules.session_name, suggestion)
                         mark_advanced("send_message", suggestion_hash)
+                    self._update_task_and_save(task)
                     return OperationResult(exit_code=0, data="completed")
                 elif answer == "f":
                     try:
@@ -198,6 +201,7 @@ class FeedbackService:
                     if message:
                         output("Sending manual message to Jules...")
                         self.client.send_message(task.jules.session_name, message)
+                        self._update_task_and_save(task)
                         return OperationResult(exit_code=0, data="completed")
                     output("Message cannot be empty.")
                 elif options.allow_skip and answer == "s":
@@ -205,3 +209,12 @@ class FeedbackService:
                     return OperationResult(exit_code=0, data="skipped")
                 else:
                     output(f"Please answer with {choices}.")
+
+    def _update_task_and_save(self, task: Task):
+        task.updated_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        if self.state and self.state.project and self.cwd:
+            save_state(self.cwd, self.state)

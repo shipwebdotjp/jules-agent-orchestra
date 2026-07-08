@@ -50,7 +50,7 @@ def handle_merge(
 
     result = service.execute(options)
     if not result.success:
-        raise OperationError(result.exit_code, result.message or "Unknown error")
+        raise OperationError(result.exit_code, result.message or "Merge failed")
 
     if result.message:
         print(result.message)

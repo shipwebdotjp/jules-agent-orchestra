@@ -44,6 +44,6 @@ def handle_review(
 
     result = service.execute(options)
     if not result.success:
-        raise OperationError(result.exit_code, result.message or "Unknown error")
+        raise OperationError(result.exit_code, result.message or "Review failed")
 
     return 0

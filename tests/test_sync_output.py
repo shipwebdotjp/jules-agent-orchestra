@@ -48,7 +48,7 @@ def test_handle_sync_output_on_change(capsys):
     args = argparse.Namespace(json=False)
 
     with MagicMock() as mock_save:
-        import jules_agent.cli.commands.sync as sync_mod
+        import jules_agent.services.sync_service as sync_mod
         original_save = sync_mod.save_state
         sync_mod.save_state = mock_save
         try:
@@ -102,7 +102,7 @@ def test_handle_sync_no_output_on_no_change(capsys):
     args = argparse.Namespace(json=False)
 
     with MagicMock() as mock_save:
-        import jules_agent.cli.commands.sync as sync_mod
+        import jules_agent.services.sync_service as sync_mod
         original_save = sync_mod.save_state
         sync_mod.save_state = mock_save
         try:
@@ -152,7 +152,7 @@ def test_handle_sync_recomputes_run_status_without_task_changes(capsys):
     args = argparse.Namespace(json=False)
 
     with MagicMock() as mock_save:
-        import jules_agent.cli.commands.sync as sync_mod
+        import jules_agent.services.sync_service as sync_mod
         original_save = sync_mod.save_state
         sync_mod.save_state = mock_save
         try:
@@ -206,7 +206,7 @@ def test_handle_sync_json_no_output(capsys):
     args = argparse.Namespace(json=True)
 
     with MagicMock() as mock_save:
-        import jules_agent.cli.commands.sync as sync_mod
+        import jules_agent.services.sync_service as sync_mod
         original_save = sync_mod.save_state
         sync_mod.save_state = mock_save
         try:

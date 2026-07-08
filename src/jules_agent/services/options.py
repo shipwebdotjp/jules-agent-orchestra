@@ -14,3 +14,9 @@ class RetryOptions(Options):
     task: Task
     args: Any = None
     output_func: Callable[[str], None] = print
+
+@dataclass
+class SyncOptions(Options):
+    skip_pr_sync: bool = False
+    json_output: bool = False
+    output_func: Callable[[str], None] = print

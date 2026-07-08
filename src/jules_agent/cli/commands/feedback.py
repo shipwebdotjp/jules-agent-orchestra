@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import datetime
 import sys
 from pathlib import Path
 from typing import Any
@@ -9,7 +8,6 @@ from typing import Any
 from ...client import JulesClient
 from ...models import State
 from ...codex import OperationError, resolve_tool_for_phase
-from ...persistence import save_state
 from ..io import select_task_interactively
 from ..state import get_candidates, resolve_task
 from ...services.feedback_service import FeedbackService, FeedbackOptions
@@ -88,17 +86,11 @@ def handle_feedback(
     result = service.execute(options)
 
     if not result.success:
-        raise OperationError(result.exit_code, result.message or "Unknown error")
+        raise OperationError(result.exit_code, result.message or "Feedback failed")
 
     outcome = result.data
     if outcome == "skipped":
         return 0
 
-    task.updated_at = (
-        datetime.datetime.now(datetime.timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-    save_state(cwd, state)
     print("Done.")
     return 0

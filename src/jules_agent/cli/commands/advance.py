@@ -8,8 +8,8 @@ from ...config import Config
 from ...github import GitHubClient
 from ...models import State
 from .sync import handle_sync
-from ..advance_core import AdvanceEngine
 from ...services.advance_service import AdvanceService, AdvanceOptions
+from ...codex import OperationError
 
 
 def handle_advance(
@@ -23,9 +23,9 @@ def handle_advance(
     # 1. Sync state at command start
     if not getattr(args, "json", False):
         print("Syncing state...")
-    sync_result = handle_sync(args, state, client, github_client, cwd, skip_pr_sync=True)
-    if sync_result != 0:
-        return sync_result
+
+    # We ignore the return value of handle_sync as it now raises OperationError on failure
+    handle_sync(args, state, client, github_client, cwd, skip_pr_sync=True)
 
     service = AdvanceService(state, client, github_client, cwd, config)
     options = AdvanceOptions(
@@ -35,7 +35,11 @@ def handle_advance(
         output_func=print,
     )
     result = service.execute(options)
-    return result.exit_code
+
+    if not result.success:
+        raise OperationError(result.exit_code, result.message or "Advance failed")
+
+    return 0
 
 
 def handle_cron(
@@ -49,9 +53,9 @@ def handle_cron(
     # 1. Sync state at command start (don't skip PR sync for cron as it might handle merges)
     if not getattr(args, "json", False):
         print("Syncing state...")
-    sync_result = handle_sync(args, state, client, github_client, cwd, skip_pr_sync=False)
-    if sync_result != 0:
-        return sync_result
+
+    # We ignore the return value of handle_sync as it now raises OperationError on failure
+    handle_sync(args, state, client, github_client, cwd, skip_pr_sync=False)
 
     service = AdvanceService(state, client, github_client, cwd, config)
     options = AdvanceOptions(
@@ -61,4 +65,8 @@ def handle_cron(
         output_func=print,
     )
     result = service.execute(options)
-    return result.exit_code
+
+    if not result.success:
+        raise OperationError(result.exit_code, result.message or "Cron failed")
+
+    return 0
