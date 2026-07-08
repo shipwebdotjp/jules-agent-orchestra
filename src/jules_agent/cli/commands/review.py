@@ -7,7 +7,7 @@ from ...client import JulesClient
 from ...github import GitHubClient
 from ...models import State
 from ...pipeline import perform_task_review
-from ...codex import resolve_tool_for_phase
+from ...codex import resolve_tool_for_phase, OperationError
 from ..io import select_task_interactively
 from ..state import get_candidates, resolve_task, sync_task_state
 from typing import Any
@@ -19,11 +19,10 @@ def handle_review(
     client: JulesClient,
     github_client: GitHubClient | None,
     cwd: Path,
-    parser: argparse.ArgumentParser,
     config: Any = None,
 ) -> int:
     if not github_client:
-        parser.exit(1, "Error: GITHUB_TOKEN is required for review.\n")
+        raise OperationError(1, "Error: GITHUB_TOKEN is required for review.")
 
     if args.task_id:
         run, task = resolve_task(state, args.task_id)

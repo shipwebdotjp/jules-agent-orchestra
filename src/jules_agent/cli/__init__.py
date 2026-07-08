@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
+import sys
 from pathlib import Path
 
 from .. import __version__
@@ -51,6 +53,7 @@ from ..pipeline import (
 from ..codex import PipelineError, SelectionCancelled, set_debug
 from ..git import get_git_remote_repo, get_git_root
 from ..persistence import load_state
+from ..codex import OperationError
 
 # Re-exporting for backward compatibility and tests
 __all__ = [
@@ -337,6 +340,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(levelname)s: %(message)s",
+        stream=sys.stderr,
+    )
     debug_enabled = args.debug or config.debug
     set_debug(debug_enabled)
 
@@ -390,17 +400,17 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "sync":
             return handle_sync(args, state, client, github_client, cwd)
         elif args.command == "approve":
-            return handle_approve(args, state, client, cwd, parser, config=config)
+            return handle_approve(args, state, client, cwd, config=config)
         elif args.command == "feedback":
-            return handle_feedback(args, state, client, cwd, parser, config=config)
+            return handle_feedback(args, state, client, cwd, config=config)
         elif args.command == "review":
-            return handle_review(args, state, client, github_client, cwd, parser, config=config)
+            return handle_review(args, state, client, github_client, cwd, config=config)
         elif args.command == "review-pass":
-            return handle_review_pass(args, state, client, github_client, cwd, parser, config=config)
+            return handle_review_pass(args, state, client, github_client, cwd, config=config)
         elif args.command == "send":
-            return handle_send(args, state, client, github_client, cwd, parser)
+            return handle_send(args, state, client, github_client, cwd)
         elif args.command == "merge":
-            return handle_merge(args, state, client, github_client, cwd, config, parser)
+            return handle_merge(args, state, client, github_client, cwd, config)
         elif args.command == "next":
             return handle_next(args, state, client, cwd, config)
         elif args.command in ("delete", "rm"):
@@ -408,6 +418,8 @@ def main(argv: list[str] | None = None) -> int:
 
     except SelectionCancelled:
         return 0
+    except OperationError as exc:
+        parser.exit(exc.exit_code, f"{exc.message}\n")
     except PipelineError as exc:
         parser.exit(1, f"{exc}\n")
 

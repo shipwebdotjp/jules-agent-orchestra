@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,8 @@ from .codex import (
     call_backend,
     display_tool_name,
 )
+
+logger = logging.getLogger("jules_agent")
 from .git import (
     CommandRunner,
     run_command,
@@ -162,7 +165,7 @@ def clarification_schema() -> dict[str, object]:
 
 
 def normalize_subtasks(payload: object, tool_label: str = "Tool") -> list[Subtask]:
-    print(        f" subtasks output: {json.dumps(payload, indent=2)}")
+    logger.debug(f" subtasks output: {json.dumps(payload, indent=2)}")
 
     if isinstance(payload, dict):
         raw_items = payload.get("tasks")
@@ -182,7 +185,7 @@ def normalize_clarification(
     payload: object,
     tool_label: str = "Tool",
 ) -> ClarificationPrompt:
-    print(        f" clarification output: {json.dumps(payload, indent=2)}")
+    logger.debug(f" clarification output: {json.dumps(payload, indent=2)}")
     if not isinstance(payload, dict):
         raise PipelineError(f"{tool_label} output must be a JSON object.")
 
@@ -660,7 +663,7 @@ def perform_task_review(
     if task.review and task.review.attempts:
         previous_head_sha = task.review.attempts[-1].head_sha
 
-    print(f"Generating diff for task {task.id} (PR #{issue_number})...")
+    logger.info(f"Generating diff for task {task.id} (PR #{issue_number})...")
     diff = get_review_diff(cwd, repo, base_sha, head_sha, previous_head_sha, github_client)
     if not diff.strip():
         raise PipelineError("Generated diff is empty. Nothing to review.")
@@ -695,7 +698,7 @@ def perform_task_review(
         f"- `next_steps`: concrete next action for the implementer\n"
     )
 
-    print(f"Posting 'In Progress' sticky comment for task {task.id}...")
+    logger.info(f"Posting 'In Progress' sticky comment for task {task.id}...")
     in_progress_body = format_review_sticky_comment(
         task=task,
         status="in_progress",
@@ -707,7 +710,7 @@ def perform_task_review(
     )
     update_sticky_comment(github_client, repo, issue_number, in_progress_body, task)
 
-    print(f"Calling {tool_label} for review of task {task.id}...")
+    logger.info(f"Calling {tool_label} for review of task {task.id}...")
     prev_status = task.status
     task.status = "reviewing"
     save_state(cwd, state)
@@ -737,7 +740,7 @@ def perform_task_review(
         save_state(cwd, state)
         raise PipelineError(f"{tool_label} review failed: {e}") from e
 
-    print(f"Review completed for task {task.id}. Status: {result['status']}")
+    logger.info(f"Review completed for task {task.id}. Status: {result['status']}")
 
     # Update sticky comment
     body = format_review_sticky_comment(

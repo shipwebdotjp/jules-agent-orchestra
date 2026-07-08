@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import logging
 try:
     import fcntl
 except ImportError:
@@ -25,6 +26,8 @@ from .state import (
     sync_task_state,
 )
 from ..codex import resolve_tool_for_phase
+
+logger = logging.getLogger("jules_agent")
 
 
 def dispatch_task(
@@ -69,7 +72,7 @@ def dispatch_task(
     except Exception as e:
         task.status = "failed"
         if verbose:
-            print(f"  Failed: {e}", file=sys.stderr)
+            logger.error(f"  Failed: {e}")
 
     task.updated_at = (
         datetime.datetime.now(datetime.timezone.utc)

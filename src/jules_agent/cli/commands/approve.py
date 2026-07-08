@@ -9,6 +9,7 @@ from ...models import State
 from ...persistence import save_state
 from ..io import select_task_interactively
 from ..state import get_candidates, resolve_task
+from ...codex import OperationError
 
 
 from typing import Any
@@ -19,7 +20,6 @@ def handle_approve(
     state: State,
     client: JulesClient,
     cwd: Path,
-    parser: argparse.ArgumentParser,
     config: Any = None,
 ) -> int:
     if args.task_id:
@@ -31,8 +31,8 @@ def handle_approve(
         task_id_for_print = f"{_run.id}:{task.id}"
 
     if not task.jules:
-        parser.exit(
-            1, f"Error: Task {task_id_for_print} has not been dispatched yet.\n"
+        raise OperationError(
+            1, f"Error: Task {task_id_for_print} has not been dispatched yet."
         )
 
     print(f"Approving plan for task {task_id_for_print}...")

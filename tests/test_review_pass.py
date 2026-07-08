@@ -54,7 +54,7 @@ def test_handle_review_pass_with_task_id(mock_resolve, mock_sync, mock_save):
     github_client = MagicMock()
     github_client.get_pull_request.return_value = {"head": {"sha": "abc123"}}
 
-    result = handle_review_pass(args, state, client, github_client, Path("/tmp"), MagicMock())
+    result = handle_review_pass(args, state, client, github_client, Path("/tmp"))
 
     assert result == 0
     assert task.status == "review_passed"
@@ -76,7 +76,7 @@ def test_handle_review_pass_interactive(mock_candidates, mock_select, mock_sync,
     github_client = MagicMock()
     github_client.get_pull_request.return_value = {"head": {"sha": "def456"}}
 
-    result = handle_review_pass(args, state, client, github_client, Path("/tmp"), MagicMock())
+    result = handle_review_pass(args, state, client, github_client, Path("/tmp"))
 
     assert result == 0
     assert task.status == "review_passed"
@@ -88,11 +88,12 @@ def test_handle_review_pass_no_github_client():
     args = argparse.Namespace(task_id=None)
     state = make_state()
     client = MagicMock()
-    parser = MagicMock()
 
-    result = handle_review_pass(args, state, client, None, Path("/tmp"), parser)
+    from jules_agent.codex import OperationError
+    with pytest.raises(OperationError) as excinfo:
+        handle_review_pass(args, state, client, None, Path("/tmp"))
 
-    parser.exit.assert_called_once_with(1, "Error: GITHUB_TOKEN is required for review-pass.\n")
+    assert "GITHUB_TOKEN is required for review-pass" in str(excinfo.value)
 
 
 @patch("jules_agent.cli.commands.review_pass.sync_task_state")
@@ -110,7 +111,7 @@ def test_handle_review_pass_already_merged(mock_resolve, mock_sync):
     client = MagicMock()
     github_client = MagicMock()
 
-    result = handle_review_pass(args, state, client, github_client, Path("/tmp"), MagicMock())
+    result = handle_review_pass(args, state, client, github_client, Path("/tmp"))
 
     assert result == 0
     assert task.status == "merged"
@@ -133,14 +134,12 @@ def test_handle_review_pass_no_pull_request(mock_resolve, mock_sync):
     args = argparse.Namespace(task_id="t1")
     client = MagicMock()
     github_client = MagicMock()
-    parser = MagicMock()
 
-    parser.exit.side_effect = SystemExit(1)
+    from jules_agent.codex import OperationError
+    with pytest.raises(OperationError) as excinfo:
+        handle_review_pass(args, state, client, github_client, Path("/tmp"))
 
-    with pytest.raises(SystemExit):
-        handle_review_pass(args, state, client, github_client, Path("/tmp"), parser)
-
-    parser.exit.assert_called_once_with(1, f"Error: Task {task.id} has no pull request.\n")
+    assert f"Error: Task {task.id} has no pull request." in str(excinfo.value)
 
 
 @patch("jules_agent.cli.commands.review_pass.sync_task_state")
@@ -158,8 +157,9 @@ def test_handle_review_pass_no_head_sha(mock_resolve, mock_sync):
     client = MagicMock()
     github_client = MagicMock()
     github_client.get_pull_request.return_value = {"head": {}}
-    parser = MagicMock()
 
-    result = handle_review_pass(args, state, client, github_client, Path("/tmp"), parser)
+    from jules_agent.codex import OperationError
+    with pytest.raises(OperationError) as excinfo:
+        handle_review_pass(args, state, client, github_client, Path("/tmp"))
 
-    parser.exit.assert_called_once_with(1, "Error: Could not determine current head SHA.\n")
+    assert "Error: Could not determine current head SHA." in str(excinfo.value)

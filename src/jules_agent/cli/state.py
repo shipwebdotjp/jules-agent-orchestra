@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import re
-import sys
 from pathlib import Path
 
 from ..client import JulesClient
@@ -18,6 +18,8 @@ from ..models import (
     gitPatchInfo,
 )
 from ..codex import PipelineError
+
+logger = logging.getLogger("jules_agent")
 
 
 def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
@@ -67,28 +69,21 @@ def sync_pr_created_task(
     task: Task,
 ) -> bool:
     if not task.pull_request or not task.pull_request.url:
-        print(
-            f"Warning: Task {task.id} is pr_created but has no pull request URL.",
-            file=sys.stderr,
-        )
+        logger.warning(f"Task {task.id} is pr_created but has no pull request URL.")
         return False
 
     pull_number = extract_pull_request_number(task.pull_request.url)
     if pull_number is None:
-        print(
-            "Warning: Could not parse pull request number from "
-            f"{task.pull_request.url!r} for task {task.id}.",
-            file=sys.stderr,
+        logger.warning(
+            "Could not parse pull request number from "
+            f"{task.pull_request.url!r} for task {task.id}."
         )
         return False
 
     try:
         pull_request = github_client.get_pull_request(repo, pull_number)
     except Exception as exc:
-        print(
-            f"Warning: Failed to fetch PR details for task {task.id}: {exc}",
-            file=sys.stderr,
-        )
+        logger.warning(f"Failed to fetch PR details for task {task.id}: {exc}")
         return False
 
     state = pull_request.get("state")
@@ -104,10 +99,7 @@ def sync_pr_created_task(
         )
         return True
 
-    print(
-        f"Warning: Unexpected PR state {state!r} for task {task.id}.",
-        file=sys.stderr,
-    )
+    logger.warning(f"Unexpected PR state {state!r} for task {task.id}.")
     return False
 
 
@@ -157,10 +149,7 @@ def sync_task(client: JulesClient, task: Task) -> bool:
         try:
             task.jules.activities = list(client.list_activities(task.jules.session_name))
         except Exception as e:
-            print(
-                f"Warning: Failed to fetch activities for task {task.id}: {e}",
-                file=sys.stderr,
-            )
+            logger.warning(f"Failed to fetch activities for task {task.id}: {e}")
 
         has_pr = False
         outputs = session.get("outputs", [])
@@ -202,7 +191,7 @@ def sync_task(client: JulesClient, task: Task) -> bool:
                 )
         return True
     except Exception as e:
-        print(f"Failed to sync task {task.id}: {e}", file=sys.stderr)
+        logger.error(f"Failed to sync task {task.id}: {e}")
         return False
 
 

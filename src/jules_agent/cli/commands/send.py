@@ -10,6 +10,7 @@ from ...models import State
 from ...persistence import save_state
 from ..io import select_task_interactively
 from ..state import get_candidates, resolve_task, sync_task_state
+from ...codex import OperationError
 
 
 def handle_send(
@@ -18,7 +19,6 @@ def handle_send(
     client: JulesClient,
     github_client: GitHubClient | None,
     cwd: Path,
-    parser: argparse.ArgumentParser,
 ) -> int:
     # args.args is a list due to nargs="+"
     if len(args.args) >= 2:
@@ -34,8 +34,8 @@ def handle_send(
 
     sync_task_state(client, github_client, state, run, task, cwd)
     if not task.jules:
-        parser.exit(
-            1, f"Error: Task {task_id_for_print} has not been dispatched yet.\n"
+        raise OperationError(
+            1, f"Error: Task {task_id_for_print} has not been dispatched yet."
         )
 
     print(f"Sending message to task {task_id_for_print}...")
