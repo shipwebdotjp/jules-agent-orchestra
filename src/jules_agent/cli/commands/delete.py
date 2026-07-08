@@ -17,8 +17,8 @@ def handle_delete(args: argparse.Namespace, state: State, cwd: Path) -> int:
     elif args.subcommand == "task":
         return handle_delete_task(args, state, service)
     else:
-        print("Error: Unknown delete subcommand. Use 'run' or 'task'.")
-        return 1
+        # This case should be handled by argparse
+        raise OperationError(1, f"Unknown delete subcommand: {args.subcommand}")
 
 def handle_delete_run(
     args: argparse.Namespace,
@@ -34,16 +34,14 @@ def handle_delete_run(
                 target_run = run
                 break
         if not target_run:
-            print(f"Error: Run {run_id} not found.")
-            return 1
+            raise OperationError(1, f"Error: Run {run_id} not found.")
     else:
         try:
             target_run = select_run_interactively(state)
         except SelectionCancelled:
             return 0
         except PipelineError as e:
-            print(e)
-            return 1
+            raise OperationError(1, str(e)) from e
 
     options = DeleteOptions(
         target_run=target_run,
@@ -55,7 +53,7 @@ def handle_delete_run(
 
     result = service.delete_run(options)
     if not result.success:
-        raise OperationError(result.exit_code, result.message or "Unknown error")
+        raise OperationError(result.exit_code, result.message or "Delete run failed")
 
     if result.message:
         print(result.message)
@@ -75,8 +73,7 @@ def handle_delete_task(
         try:
             target_run, target_task = resolve_task(state, task_id_arg)
         except PipelineError as e:
-            print(e)
-            return 1
+            raise OperationError(1, str(e)) from e
     else:
         candidates = get_candidates(state, "delete task")
         try:
@@ -84,8 +81,7 @@ def handle_delete_task(
         except SelectionCancelled:
             return 0
         except PipelineError as e:
-            print(e)
-            return 1
+            raise OperationError(1, str(e)) from e
 
     options = DeleteOptions(
         target_run=target_run,
@@ -98,7 +94,7 @@ def handle_delete_task(
 
     result = service.delete_task(options)
     if not result.success:
-        raise OperationError(result.exit_code, result.message or "Unknown error")
+        raise OperationError(result.exit_code, result.message or "Delete task failed")
 
     if result.message:
         print(result.message)

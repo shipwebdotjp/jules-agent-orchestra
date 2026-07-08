@@ -56,7 +56,7 @@ def test_handle_sync_multi_step_transition():
 
     # We need to mock save_state because it writes to disk
     with MagicMock() as mock_save:
-        import jules_agent.cli.commands.sync as sync_mod
+        import jules_agent.services.sync_service as sync_mod
         original_save = sync_mod.save_state
         sync_mod.save_state = mock_save
         try:

@@ -7,9 +7,8 @@ from typing import Any
 from ...client import JulesClient
 from ...models import State, ProjectState
 from ...config import Config
-from ...codex import resolve_tool_for_phase
+from ...codex import resolve_tool_for_phase, OperationError
 from ...git import run_command
-from ...pipeline import decompose_task
 from ..io import (
     build_review_prompt,
     prompt_for_clarification_answer,
@@ -104,4 +103,11 @@ def handle_run(
     )
 
     result = service.execute(options)
-    return result.exit_code
+
+    if not result.success:
+        raise OperationError(result.exit_code, result.message or "Run failed")
+
+    if result.message:
+        print(result.message)
+
+    return 0

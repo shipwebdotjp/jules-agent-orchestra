@@ -40,7 +40,7 @@ def handle_retry(
     )
     result = service.execute(options)
 
-    if result.exit_code != 0:
-        raise OperationError(result.exit_code, result.message or "Retry failed.")
+    if not result.success:
+        raise OperationError(result.exit_code, result.message or "Retry failed")
 
     return 0

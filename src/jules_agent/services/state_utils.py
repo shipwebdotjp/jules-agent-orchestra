@@ -1,6 +1,25 @@
 from __future__ import annotations
 
-from ..models import Run, RunStatus, TaskStatus
+import datetime
+import logging
+import re
+from pathlib import Path
+
+from ..client import JulesClient
+from ..github import GitHubClient
+from ..models import (
+    PR_SYNC_STATUSES,
+    PullRequestInfo,
+    Run,
+    RunStatus,
+    State,
+    Task,
+    TaskStatus,
+    gitPatchInfo,
+)
+from ..codex import PipelineError
+
+logger = logging.getLogger("jules_agent")
 
 def get_run_sync_status(
     run: Run,
@@ -33,3 +52,291 @@ def get_jules_state_mapping(jules_state: str, has_pr: bool) -> TaskStatus:
     if jules_state == "COMPLETED":
         return "pr_created" if has_pr else "completed"
     return mapping.get(jules_state, "dispatched")
+
+
+def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
+    if ":" in task_id_arg:
+        run_id, task_id = task_id_arg.split(":", 1)
+        for run in state.runs:
+            if run.id == run_id:
+                for task in run.tasks:
+                    if task.id == task_id:
+                        return run, task
+        raise PipelineError(f"Task {task_id_arg} not found.")
+
+    candidates: list[tuple[Run, Task]] = []
+    for run in state.runs:
+        for task in run.tasks:
+            if task.id == task_id_arg:
+                candidates.append((run, task))
+
+    if not candidates:
+        raise PipelineError(f"Task {task_id_arg} not found.")
+    if len(candidates) > 1:
+        run_ids = ", ".join(r.id for r, t in candidates)
+        raise PipelineError(
+            f"Task {task_id_arg} is ambiguous. Found in runs: {run_ids}. "
+            "Please use RUN_ID:TASK_ID format."
+        )
+    return candidates[0]
+
+
+PULL_REQUEST_NUMBER_RE = re.compile(r"/pulls?/(\d+)(?:[/?#]|$)")
+
+
+def extract_pull_request_number(url: str | None) -> int | None:
+    if not url:
+        return None
+
+    match = PULL_REQUEST_NUMBER_RE.search(url)
+    if not match:
+        return None
+
+    return int(match.group(1))
+
+
+def sync_pr_created_task(
+    github_client: GitHubClient,
+    repo: str,
+    task: Task,
+) -> bool:
+    if not task.pull_request or not task.pull_request.url:
+        logger.warning(f"Task {task.id} is pr_created but has no pull request URL.")
+        return False
+
+    pull_number = extract_pull_request_number(task.pull_request.url)
+    if pull_number is None:
+        logger.warning(
+            "Could not parse pull request number from "
+            f"{task.pull_request.url!r} for task {task.id}."
+        )
+        return False
+
+    try:
+        pull_request = github_client.get_pull_request(repo, pull_number)
+    except Exception as exc:
+        logger.warning(f"Failed to fetch PR details for task {task.id}: {exc}")
+        return False
+
+    state = pull_request.get("state")
+    if state == "open":
+        return False
+
+    if state == "closed":
+        task.status = "merged" if pull_request.get("merged_at") else "pr_closed"
+        task.updated_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        return True
+
+    logger.warning(f"Unexpected PR state {state!r} for task {task.id}.")
+    return False
+
+
+def sync_task(client: JulesClient, task: Task) -> bool:
+    if not task.jules:
+        return False
+
+    try:
+        session = client.get_session(task.jules.session_name)
+        task.jules.state = session.get("state", task.jules.state)
+        task.jules.update_time = session.get("updateTime", task.jules.update_time)
+        task.jules.session_url = session.get("url", task.jules.session_url)
+
+        try:
+            task.jules.activities = list(client.list_activities(task.jules.session_name))
+        except Exception as e:
+            logger.warning(f"Failed to fetch activities for task {task.id}: {e}")
+
+        has_pr = False
+        outputs = session.get("outputs", [])
+        for output in outputs:
+            pr = output.get("pullRequest")
+            if pr:
+                task.pull_request = PullRequestInfo(
+                    url=pr.get("url"),
+                    title=pr.get("title"),
+                    description=pr.get("description"),
+                )
+                has_pr = True
+            changeSet = output.get("changeSet", [])
+            if changeSet:
+                gitPatch = changeSet.get("gitPatch", None)
+                if gitPatch:
+                    gitPatch_info = gitPatchInfo(
+                        unidiffPatch=gitPatch.get("unidiffPatch", ""),
+                        baseCommitId=gitPatch.get("baseCommitId", ""),
+                        suggestedCommitMessage=gitPatch.get("suggestedCommitMessage", ""),
+                    )
+                    task.jules.code_changes = gitPatch_info
+
+        new_status = get_jules_state_mapping(task.jules.state, has_pr)
+        if task.status != new_status:
+            # Prevent status regression: if we are already in a post-PR state,
+            # don't go back to pr_created even if Jules says COMPLETED.
+            if (
+                task.status in ("reviewing", "review_passed", "needs_fix", "waiting_human_review")
+                and new_status == "pr_created"
+            ):
+                pass
+            else:
+                task.status = new_status
+                task.updated_at = (
+                    datetime.datetime.now(datetime.timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to sync task {task.id}: {e}")
+        return False
+
+
+def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
+    candidates: list[tuple[Run, Task]] = []
+    for run in state.runs:
+        for task in run.tasks:
+            eligible = False
+            if command == "approve":
+                eligible = task.jules is not None and task.status == "awaiting_plan_approval"
+            elif command == "feedback":
+                eligible = task.jules is not None and task.status in (
+                    "awaiting_plan_approval",
+                    "awaiting_user_feedback",
+                )
+            elif command == "send":
+                eligible = task.jules is not None and task.status not in (
+                    "completed",
+                    "merged",
+                    "pr_closed",
+                    "failed",
+                    "cancelled",
+                )
+            elif command == "review":
+                eligible = task.pull_request is not None and task.status in (
+                    "pr_created",
+                    "reviewing",
+                    "review_passed",
+                    "needs_fix",
+                    "waiting_human_review",
+                )
+            elif command == "merge":
+                eligible = task.pull_request is not None and task.status in (
+                    "pr_created",
+                    "review_passed",
+                    "waiting_human_review",
+                    "needs_fix",
+                )
+            elif command == "delete task":
+                eligible = True
+            elif command == "retry":
+                eligible = task.status == "failed"
+            elif command == "next":
+                # For 'next', we want the first 'planned' task of a running sequential run
+                # if all prior tasks are terminal (merged or completed).
+                if (
+                    run.strategy == "sequential_subtasks"
+                    and run.status == "running"
+                    and task.status == "planned"
+                ):
+                    prior_done = True
+                    for t in run.tasks:
+                        if t.id == task.id:
+                            break
+                        if t.status not in ("completed", "merged"):
+                            prior_done = False
+                            break
+
+                    if prior_done:
+                        eligible = True
+
+            if eligible:
+                candidates.append((run, task))
+
+    # Sort by updated_at descending
+    candidates.sort(key=lambda x: x[1].updated_at, reverse=True)
+    return candidates
+
+
+def perform_task_sync_logic(
+    client: JulesClient,
+    github_client: GitHubClient | None,
+    repo: str,
+    task: Task,
+    skip_pr_sync: bool = False,
+) -> bool:
+    """
+    Encapsulates the decision logic for syncing a single task from Jules and/or GitHub.
+    Returns True if the task status or other details were modified.
+    """
+    updated = False
+
+    # 1. Sync from Jules if in an active non-PR state
+    if (
+        task.status not in (
+            "completed",
+            "merged",
+            "failed",
+            "cancelled",
+            "pr_closed",
+        )
+        and task.status not in PR_SYNC_STATUSES
+    ):
+        if sync_task(client, task):
+            updated = True
+
+    # 2. Sync from GitHub if in a PR-related state
+    if (
+        task.status in PR_SYNC_STATUSES
+        and not skip_pr_sync
+        and github_client
+    ):
+        if sync_pr_created_task(github_client, repo, task):
+            updated = True
+
+    return updated
+
+
+def sync_task_state(
+    client: JulesClient,
+    github_client: GitHubClient | None,
+    state: State,
+    run: Run,
+    task: Task,
+    cwd: Path,
+) -> bool:
+    """
+    Syncs the state of a single task (and its parent run) from Jules and/or GitHub.
+    Returns True if any updates occurred.
+    """
+    from ..persistence import save_state
+
+    previous_run_status = run.status
+    task_initial_status = task.status
+
+    updated = perform_task_sync_logic(
+        client,
+        github_client,
+        state.project.repo,
+        task,
+        skip_pr_sync=False
+    )
+
+    if updated or task.status != task_initial_status:
+        updated = True
+        reopened_from_completed = previous_run_status == "completed"
+        run.status = get_run_sync_status(
+            run,
+            previous_status=previous_run_status,
+            reopened_from_completed=reopened_from_completed,
+        )
+        run.updated_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        save_state(cwd, state)
+
+    return updated
