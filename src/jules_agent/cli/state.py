@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import re
 import sys
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from ..models import (
     gitPatchInfo,
 )
 from ..codex import PipelineError
+from ..utils import extract_pull_request_number
 
 
 def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
@@ -47,18 +47,6 @@ def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
     return candidates[0]
 
 
-PULL_REQUEST_NUMBER_RE = re.compile(r"/pulls?/(\d+)(?:[/?#]|$)")
-
-
-def extract_pull_request_number(url: str | None) -> int | None:
-    if not url:
-        return None
-
-    match = PULL_REQUEST_NUMBER_RE.search(url)
-    if not match:
-        return None
-
-    return int(match.group(1))
 
 
 def sync_pr_created_task(

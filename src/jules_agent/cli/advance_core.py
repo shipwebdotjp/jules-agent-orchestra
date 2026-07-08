@@ -20,10 +20,10 @@ from ..git import get_git_branch
 from .state import (
     get_candidates,
     sync_task,
-    extract_pull_request_number,
     get_jules_state_mapping,
     sync_task_state,
 )
+from ..utils import extract_pull_request_number
 from ..codex import resolve_tool_for_phase
 
 
