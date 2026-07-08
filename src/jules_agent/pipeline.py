@@ -21,7 +21,6 @@ from .git import (
     run_command,
 )
 from .github import GitHubClient
-from .utils import extract_pull_request_number
 from .models import (
     ExecutionPlan,
     State,
@@ -644,6 +643,8 @@ def perform_task_review(
 
     tool_label = display_tool_name(tool_name)
 
+    # Lazy import to avoid circular dependency
+    from .cli.state import extract_pull_request_number
     issue_number = extract_pull_request_number(task.pull_request.url)
     if not issue_number:
         raise PipelineError(f"Could not extract PR number from {task.pull_request.url}")

@@ -32,6 +32,7 @@ from .io import (
     select_task_interactively,
 )
 from .state import (
+    extract_pull_request_number,
     get_candidates,
     get_jules_state_mapping,
     get_run_sync_status,
@@ -42,7 +43,6 @@ from .state import (
 from ..client import JulesClient
 from ..config import load_config
 from ..github import GitHubClient
-from ..utils import extract_pull_request_number
 from ..models import (
     ProjectState,
     State,
@@ -50,10 +50,9 @@ from ..models import (
 from ..pipeline import (
     suggest_reply,
 )
-from ..codex import PipelineError, SelectionCancelled, set_debug
+from ..codex import OperationError, PipelineError, SelectionCancelled, set_debug
 from ..git import get_git_remote_repo, get_git_root
 from ..persistence import load_state
-from ..codex import OperationError
 
 # Re-exporting for backward compatibility and tests
 __all__ = [
@@ -342,12 +341,12 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(args.config)
 
     # Configure logging
+    debug_enabled = args.debug or config.debug
     logging.basicConfig(
-        level=logging.WARNING,
-        format="%(levelname)s: %(message)s",
+        level=logging.DEBUG if debug_enabled else logging.INFO,
+        format="%(message)s",
         stream=sys.stderr,
     )
-    debug_enabled = args.debug or config.debug
     set_debug(debug_enabled)
 
     api_key = os.environ.get("JULES_API_KEY") or config.api_key

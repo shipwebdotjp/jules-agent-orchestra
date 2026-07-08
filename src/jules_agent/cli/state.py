@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 import logging
 import re
-import sys
 from pathlib import Path
 
 from ..client import JulesClient
@@ -19,7 +18,6 @@ from ..models import (
     gitPatchInfo,
 )
 from ..codex import PipelineError
-from ..utils import extract_pull_request_number
 
 logger = logging.getLogger("jules_agent")
 
@@ -51,6 +49,18 @@ def resolve_task(state: State, task_id_arg: str) -> tuple[Run, Task]:
     return candidates[0]
 
 
+PULL_REQUEST_NUMBER_RE = re.compile(r"/pulls?/(\d+)(?:[/?#]|$)")
+
+
+def extract_pull_request_number(url: str | None) -> int | None:
+    if not url:
+        return None
+
+    match = PULL_REQUEST_NUMBER_RE.search(url)
+    if not match:
+        return None
+
+    return int(match.group(1))
 
 
 def sync_pr_created_task(
@@ -238,15 +248,7 @@ def get_candidates(state: State, command: str) -> list[tuple[Run, Task]]:
                             first_planned = t
                             break
                     if first_planned and first_planned.id == task.id:
-                        # All earlier tasks must be terminal (completed/merged)
-                        # before dispatching the next one in a sequential run.
                         eligible = True
-                        for t in run.tasks:
-                            if t.id == first_planned.id:
-                                break
-                            if t.status not in ("completed", "merged"):
-                                eligible = False
-                                break
 
             if eligible:
                 candidates.append((run, task))

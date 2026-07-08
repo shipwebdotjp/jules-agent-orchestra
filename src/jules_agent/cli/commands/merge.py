@@ -11,8 +11,7 @@ from ...models import State
 from ...persistence import save_state
 from ...git import run_command, get_git_branch
 from ..io import select_task_interactively
-from ..state import get_candidates, resolve_task, sync_task_state
-from ...utils import extract_pull_request_number
+from ..state import get_candidates, resolve_task, extract_pull_request_number, sync_task_state
 from .sync import handle_sync
 from ...codex import OperationError
 

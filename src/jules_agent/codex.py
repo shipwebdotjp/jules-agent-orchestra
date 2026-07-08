@@ -50,7 +50,7 @@ def set_debug(enabled: bool) -> None:
     if enabled:
         logger.setLevel(logging.DEBUG)
     else:
-        logger.setLevel(logging.WARNING)
+        logger.setLevel(logging.INFO)
 
 
 def debug_command(args: list[str], cwd: Path, *, label: str | None = None) -> None:

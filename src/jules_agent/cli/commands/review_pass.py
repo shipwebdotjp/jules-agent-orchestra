@@ -10,9 +10,8 @@ from ...github import GitHubClient
 from ...models import State, TaskReview
 from ...persistence import save_state
 from ..io import select_task_interactively
+from ..state import get_candidates, resolve_task, sync_task_state, extract_pull_request_number
 from ...codex import OperationError
-from ..state import get_candidates, resolve_task, sync_task_state
-from ...utils import extract_pull_request_number
 
 
 def handle_review_pass(
