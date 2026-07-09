@@ -64,8 +64,14 @@ class RetryService:
             starting_branch = get_git_branch(self.cwd)
             automation_mode = (
                 getattr(options.args, "automation_mode", None)
+                or run.automation_mode
                 or getattr(self.config, "automation_mode", None)
                 or "AUTO_CREATE_PR"
+            )
+            require_plan_approval = (
+                run.require_plan_approval
+                if run.require_plan_approval is not None
+                else False
             )
 
             session = self.client.create_session(
@@ -73,7 +79,7 @@ class RetryService:
                 source_name=source_name,
                 starting_branch=starting_branch,
                 title=task.title,
-                require_plan_approval=False,
+                require_plan_approval=require_plan_approval,
                 automation_mode=automation_mode,
             )
             task.jules = JulesSessionInfo(

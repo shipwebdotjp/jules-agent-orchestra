@@ -367,7 +367,17 @@ class AdvanceService:
     ) -> None:
         source_name = find_source_name(self.client, self.state.project.repo)
         starting_branch = get_git_branch(self.cwd)
-        automation_mode = getattr(args, "automation_mode", None) or getattr(self.config, "automation_mode", None) or "AUTO_CREATE_PR"
+        automation_mode = (
+            getattr(args, "automation_mode", None)
+            or run.automation_mode
+            or getattr(self.config, "automation_mode", None)
+            or "AUTO_CREATE_PR"
+        )
+        require_plan_approval = (
+            run.require_plan_approval
+            if run.require_plan_approval is not None
+            else False
+        )
 
         if verbose:
             output_func(f"Dispatching next task: {task.id} - {task.title}")
@@ -379,7 +389,7 @@ class AdvanceService:
                 source_name=source_name,
                 starting_branch=starting_branch,
                 title=task.title,
-                require_plan_approval=False,
+                require_plan_approval=require_plan_approval,
                 automation_mode=automation_mode,
             )
             task.jules = JulesSessionInfo(

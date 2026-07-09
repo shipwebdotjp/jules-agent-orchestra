@@ -85,6 +85,8 @@ class RunService:
             status="running",
             created_at=now_iso,
             updated_at=now_iso,
+            automation_mode=options.automation_mode,
+            require_plan_approval=not options.auto_plan_approval,
         )
 
         for i, subtask in enumerate(plan.tasks, start=1):
