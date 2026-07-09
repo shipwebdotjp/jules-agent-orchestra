@@ -299,9 +299,12 @@ class JulesTUI(App):
 
         def do_review():
             service = ReviewService(self.state, self.client, self.github_client, self.cwd)
-            options = ReviewOptions(run=run, task=task, config=self.config, output_func=self.notify)
+            options = ReviewOptions(task=task)
             result = service.execute(options)
-            self.notify(result.message or "Review completed")
+            if result.success:
+                self.notify("Review completed")
+            else:
+                self.notify(result.message or "Review failed", variant="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_review, thread=True)
@@ -313,9 +316,12 @@ class JulesTUI(App):
 
         def do_review_pass():
             service = ReviewPassService(self.state, self.client, self.github_client, self.cwd)
-            options = ReviewPassOptions(run=run, task=task, output_func=self.notify)
+            options = ReviewPassOptions(task=task)
             result = service.execute(options)
-            self.notify(result.message or "Review-pass completed")
+            if result.success:
+                self.notify("Review-pass completed")
+            else:
+                self.notify(result.message or "Review-pass failed", variant="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_review_pass, thread=True)
@@ -326,17 +332,20 @@ class JulesTUI(App):
             return
 
         def do_merge():
-            service = MergeService(self.state, self.client, self.github_client, self.cwd)
+            service = MergeService(self.state, self.client, self.github_client, self.cwd, self.config)
             options = MergeOptions(
                 run=run,
                 task=task,
+                task_id_for_print=f"{run.id}:{task.id}",
                 delete_branch=self.config.merge_delete_branch,
                 pull=self.config.merge_pull,
                 merge_method=self.config.merge_method,
-                output_func=self.notify
             )
             result = service.execute(options)
-            self.notify(result.message or "Merge completed")
+            if result.success:
+                self.notify("Merge completed")
+            else:
+                self.notify(result.message or "Merge failed", variant="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_merge, thread=True)
@@ -346,11 +355,25 @@ class JulesTUI(App):
         if not run:
             return
 
+        # NextService needs a planned task to dispatch
+        planned_tasks = [t for t in run.tasks if t.status == "planned"]
+        if not planned_tasks:
+            self.notify("No planned tasks to dispatch in this run.", variant="error")
+            return
+
+        task_to_dispatch = planned_tasks[0]
+
         def do_next():
-            service = NextService(self.state, self.client, self.cwd)
-            options = NextOptions(run=run, automation_mode=self.config.automation_mode, output_func=self.notify)
+            service = NextService(self.state, self.client, self.cwd, self.config)
+            # automation_mode is passed via args in NextOptions
+            from argparse import Namespace
+            args = Namespace(automation_mode=self.config.automation_mode)
+            options = NextOptions(run=run, task=task_to_dispatch, args=args)
             result = service.execute(options)
-            self.notify(result.message or "Next task dispatched")
+            if result.success:
+                self.notify(f"Dispatched {task_to_dispatch.id}")
+            else:
+                self.notify(result.message or "Next dispatch failed", variant="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_next, thread=True)
@@ -361,10 +384,14 @@ class JulesTUI(App):
             return
 
         def do_retry():
-            service = RetryService(self.state, self.client, self.cwd)
+            service = RetryService(self.state, self.client, self.cwd, self.config)
+            # RetryOptions accepts output_func
             options = RetryOptions(run=run, task=task, output_func=self.notify)
             result = service.execute(options)
-            self.notify(result.message or "Retry initiated")
+            if result.success:
+                self.notify("Retry initiated")
+            else:
+                self.notify(result.message or "Retry failed", variant="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_retry, thread=True)
