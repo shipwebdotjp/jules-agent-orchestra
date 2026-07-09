@@ -64,6 +64,21 @@ pip install -e .
 jules-agent [flags] <command> [args]
 ```
 
+引数なしで `jules-agent` を起動すると（かつ対話可能なターミナルの場合）、全画面の TUI ダッシュボードが開き、run や task の一覧確認と操作が行えます。
+TUI で利用可能なキーボードショートカット:
+- `s`: Jules および GitHub と同期 (Sync)
+- `a`: 計画の承認 (Approve)
+- `f`: フィードバックの送信 (Feedback)
+- `v`: レビューの実行 (Review)
+- `P`: 手動でレビュー合格にする (Review Pass)
+- `m`: PR のマージ (Merge)
+- `n`: Sequential run の次のタスクを送信 (Next)
+- `t`: 失敗したタスクを再試行 (Retry)
+- `d`: タスクの削除 (Delete)
+- `e`: 手動メッセージの送信 (Send Message)
+- `r`: 一覧の更新 (Refresh)
+- `q`: 終了 (Quit)
+
 基本的な流れは次のとおりです。
 
 1. `run` でタスクを作成する

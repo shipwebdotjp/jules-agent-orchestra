@@ -64,6 +64,21 @@ After installing, the `jules-agent` command is available on your `PATH`.
 jules-agent [flags] <command> [args]
 ```
 
+If you run `jules-agent` without a command in an interactive terminal, it opens a full-screen TUI dashboard where you can view and manage your runs and tasks.
+Supported keyboard shortcuts in the TUI:
+- `s`: Sync with Jules and GitHub
+- `a`: Approve plans
+- `f`: Provide feedback
+- `v`: Run reviews
+- `P`: Manually mark as review passed
+- `m`: Merge PRs
+- `n`: Dispatch next task in sequential run
+- `t`: Retry failed task
+- `d`: Delete task
+- `e`: Send manual message
+- `r`: Refresh list
+- `q`: Quit
+
 The common flow is:
 
 1. Create a task with `run`.
