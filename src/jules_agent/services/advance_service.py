@@ -26,7 +26,10 @@ from ..cli.state import (
     extract_pull_request_number,
     sync_task_state,
 )
-from .state_utils import get_jules_state_mapping
+from .state_utils import (
+    get_jules_state_mapping,
+    update_run_status_after_task_change,
+)
 from ..codex import resolve_tool_for_phase
 from .options import Options
 from .results import OperationResult
@@ -277,6 +280,7 @@ class AdvanceService:
             sync_task(self.client, target_task)
             if local_status in ("blocked", "merged"):
                 target_task.status = local_status
+            update_run_status_after_task_change(target_run)
             save_state(self.cwd, self.state)
 
             if action_name == "merged" and target_run.strategy == "sequential_subtasks":

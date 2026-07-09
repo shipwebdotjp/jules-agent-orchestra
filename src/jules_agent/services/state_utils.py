@@ -39,6 +39,21 @@ def get_run_sync_status(
     return previous_status
 
 
+def update_run_status_after_task_change(run: Run) -> bool:
+    new_status = get_run_sync_status(
+        run, previous_status=run.status, reopened_from_completed=False
+    )
+    if new_status != run.status:
+        run.status = new_status
+        run.updated_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        return True
+    return False
+
+
 def get_jules_state_mapping(jules_state: str, has_pr: bool) -> TaskStatus:
     mapping: dict[str, TaskStatus] = {
         "QUEUED": "dispatched",

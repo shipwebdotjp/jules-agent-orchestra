@@ -11,6 +11,7 @@ from ..models import State, Run, Task
 from ..persistence import save_state
 from ..git import CommandRunner, run_command, get_git_branch
 from ..cli.state import extract_pull_request_number
+from .state_utils import update_run_status_after_task_change
 from .options import Options
 from .results import OperationResult
 
@@ -85,6 +86,7 @@ class MergeService:
             .isoformat()
             .replace("+00:00", "Z")
         )
+        update_run_status_after_task_change(options.run)
         save_state(self.cwd, self.state)
 
         # Post-merge cleanup
