@@ -18,7 +18,7 @@ from ..pipeline import (
 )
 from ..codex import ClarificationExchange
 from ..git import CommandRunner, get_git_branch, run_command
-from ..persistence import save_state
+from ..persistence import generate_run_id, save_state
 from ..cli.state import get_jules_state_mapping
 from .options import Options
 from .results import OperationResult
