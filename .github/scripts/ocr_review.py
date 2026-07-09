@@ -160,7 +160,7 @@ OCR review is currently in progress...
             final_body += "\n### Findings\n"
             for f in normalized_findings:
                 final_body += f"- **{f['file']}** (line {f['line']}): {f['message']}\n"
-            final_body += "\n### Next Steps\nPlease fix the findings listed above.\n"
+            final_body += "\n### Next Steps\n@jules Verify each finding against current code. Fix only still-valid issues, skip the rest with a brief reason, keep changes minimal, and validate..\n"
         else:
             final_body += "\n### Next Steps\nNo action needed.\n"
 
