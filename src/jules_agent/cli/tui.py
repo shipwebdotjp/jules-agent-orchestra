@@ -50,7 +50,7 @@ class TaskItem(ListItem):
         self.task_data = task
 
     def compose(self) -> ComposeResult:
-        yield Label(f"[bold magenta][{self.run.id}][/] {self.task_data.id}: {self.task_data.title} ({self.task_data.status})")
+        yield Label(f"[{self.run.id}] {self.task_data.id}: {self.task_data.title} ({self.task_data.status})", markup=False)
 
 
 class DetailPane(Static):
