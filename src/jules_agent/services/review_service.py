@@ -1,22 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from ..client import JulesClient
 from ..github import GitHubClient
-from ..models import State, Task
+from ..models import State
 from ..pipeline import perform_task_review
-from .options import Options
+from .options import ReviewOptions
 from .results import OperationResult
-
-@dataclass
-class ReviewOptions(Options):
-    task: Task
-    tool_name: str = "codex"
-    tool_bin: Optional[str] = None
-    gemini_skip_trust: bool = False
 
 class ReviewService:
     def __init__(self, state: State, client: JulesClient, github_client: GitHubClient, cwd: Path):
@@ -35,6 +26,7 @@ class ReviewService:
                 tool_name=options.tool_name,
                 tool_bin=options.tool_bin,
                 gemini_skip_trust=options.gemini_skip_trust,
+                output_func=options.output_func,
             )
             return OperationResult(exit_code=0)
         except Exception as e:

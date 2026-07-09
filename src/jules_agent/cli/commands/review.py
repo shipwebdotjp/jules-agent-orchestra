@@ -40,6 +40,7 @@ def handle_review(
         tool_name=tool_name,
         tool_bin=tool_bin,
         gemini_skip_trust=gemini_skip_trust,
+        output_func=print,
     )
 
     result = service.execute(options)

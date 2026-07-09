@@ -638,6 +638,7 @@ def perform_task_review(
     tool_name: str = "codex",
     tool_bin: str | None = None,
     gemini_skip_trust: bool = False,
+    output_func: Callable[[str], None] = print,
 ) -> None:
     if not task.pull_request:
         raise PipelineError(f"Task {task.id} has no pull request associated.")
@@ -660,6 +661,7 @@ def perform_task_review(
     base_sha = pr_data["base"]["sha"]
     head_sha = pr_data["head"]["sha"]
 
+    output_func(f"Starting review for task {task.id} using {tool_label}...")
     logger.info(f"Posting 'In Progress' sticky comment for task {task.id}...")
     in_progress_body = format_review_sticky_comment(
         task=task,
@@ -672,6 +674,7 @@ def perform_task_review(
     )
     update_sticky_comment(github_client, repo, issue_number, in_progress_body, task)
 
+    output_func(f"Calling {tool_label} for review of task {task.id}...")
     logger.info(f"Calling {tool_label} for review of task {task.id}...")
     prev_status = task.status
     task.status = "reviewing"
@@ -691,6 +694,7 @@ def perform_task_review(
             if task.review and task.review.attempts:
                 previous_head_sha = task.review.attempts[-1].head_sha
 
+            output_func(f"Generating diff for task {task.id} (PR #{issue_number})...")
             logger.info(f"Generating diff for task {task.id} (PR #{issue_number})...")
             diff = get_review_diff(cwd, repo, base_sha, head_sha, previous_head_sha, github_client)
             if not diff.strip():
@@ -752,6 +756,7 @@ def perform_task_review(
         save_state(cwd, state)
         raise PipelineError(f"{tool_label} review failed: {e}") from e
 
+    output_func(f"Review completed for task {task.id}. Status: {result['status']}")
     logger.info(f"Review completed for task {task.id}. Status: {result['status']}")
 
     # Update sticky comment

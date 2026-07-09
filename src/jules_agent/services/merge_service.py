@@ -1,28 +1,19 @@
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from ..client import JulesClient
 from ..config import Config
 from ..github import GitHubClient
-from ..models import State, Run, Task
+from ..models import State
 from ..persistence import save_state
 from ..git import CommandRunner, run_command, get_git_branch
 from ..cli.state import extract_pull_request_number
 from .state_utils import update_run_status_after_task_change
-from .options import Options
+from .options import MergeOptions
 from .results import OperationResult
-
-@dataclass
-class MergeOptions(Options):
-    run: Run
-    task: Task
-    task_id_for_print: str
-    merge_method: str | None = None
-    delete_branch: bool | None = None
-    pull: bool | None = None
 
 class MergeService:
     def __init__(
@@ -44,6 +35,7 @@ class MergeService:
     def execute(self, options: MergeOptions) -> OperationResult:
         task = options.task
         task_id_for_print = options.task_id_for_print
+        output = options.output_func
 
         if task.status not in ("pr_created", "review_passed", "waiting_human_review", "needs_fix"):
             return OperationResult(
@@ -65,6 +57,7 @@ class MergeService:
             )
 
         repo = self.state.project.repo
+        output(f"Fetching details for PR #{pull_number} in {repo}...")
         try:
             pr_details = self.github_client.get_pull_request(repo, pull_number)
         except Exception as e:
@@ -74,6 +67,7 @@ class MergeService:
             return OperationResult(exit_code=1, message=f"Error: PR #{pull_number} is not mergeable at this time.")
 
         merge_method = options.merge_method or self.config.merge_method or "merge"
+        output(f"Merging PR #{pull_number} using {merge_method} method...")
 
         try:
             self.github_client.merge_pull_request(repo, pull_number, merge_method=merge_method)
@@ -99,11 +93,11 @@ class MergeService:
             pull_after_merge = self.config.merge_pull
 
         if delete_branch or pull_after_merge:
-            self._cleanup(pr_details, delete_branch, pull_after_merge)
+            self._cleanup(pr_details, delete_branch, pull_after_merge, output=output)
 
         return OperationResult(exit_code=0, message="Successfully merged and updated state.")
 
-    def _cleanup(self, pr_details: dict, delete_branch: bool, pull_after_merge: bool):
+    def _cleanup(self, pr_details: dict, delete_branch: bool, pull_after_merge: bool, output: Callable[[str], None] = print):
         repo = self.state.project.repo
         head_branch = pr_details.get("head", {}).get("ref")
         base_branch = pr_details.get("base", {}).get("ref")
@@ -114,12 +108,14 @@ class MergeService:
         current_branch = get_git_branch(self.cwd)
 
         if pull_after_merge:
+            output(f"Switching to {base_branch} and pulling updates...")
             res = self.runner(["git", "checkout", base_branch], cwd=self.cwd)
             if res.returncode == 0:
                 self.runner(["git", "pull"], cwd=self.cwd)
                 current_branch = base_branch
 
         if delete_branch:
+            output(f"Deleting head branch {head_branch}...")
             if current_branch == head_branch:
                 res = self.runner(["git", "checkout", base_branch], cwd=self.cwd)
                 if res.returncode == 0:

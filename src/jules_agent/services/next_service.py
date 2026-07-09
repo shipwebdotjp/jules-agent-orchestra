@@ -1,20 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from ..client import JulesClient
 from ..config import Config
-from ..models import State, Run, Task
-from .options import Options
+from ..models import State
+from .options import NextOptions
 from .results import OperationResult
-
-@dataclass
-class NextOptions(Options):
-    run: Run
-    task: Task
-    args: Any = None
 
 class NextService:
     def __init__(self, state: State, client: JulesClient, cwd: Path, config: Config):
@@ -31,6 +23,7 @@ class NextService:
                 task=options.task,
                 run=options.run,
                 args=options.args,
+                output_func=options.output_func,
             )
             return OperationResult(exit_code=0)
         except Exception as e:

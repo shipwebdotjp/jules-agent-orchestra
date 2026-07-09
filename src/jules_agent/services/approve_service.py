@@ -1,20 +1,13 @@
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass
 from pathlib import Path
 
 from ..client import JulesClient
-from ..models import State, Run, Task
+from ..models import State
 from ..persistence import save_state
-from .options import Options
+from .options import ApproveOptions
 from .results import OperationResult
-
-@dataclass
-class ApproveOptions(Options):
-    run: Run
-    task: Task
-    task_id_for_print: str
 
 class ApproveService:
     def __init__(self, state: State, client: JulesClient, cwd: Path):
@@ -25,6 +18,7 @@ class ApproveService:
     def execute(self, options: ApproveOptions) -> OperationResult:
         task = options.task
         task_id_for_print = options.task_id_for_print
+        output = options.output_func
 
         if not task.jules:
             return OperationResult(
@@ -33,6 +27,7 @@ class ApproveService:
             )
 
         # Business logic: Approve in Jules
+        output(f"Approving plan for task {task_id_for_print} in Jules...")
         try:
             self.client.approve_plan(task.jules.session_name)
         except Exception as e:

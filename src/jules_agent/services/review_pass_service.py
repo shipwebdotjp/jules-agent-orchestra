@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass
 from pathlib import Path
 
 from ..client import JulesClient
 from ..github import GitHubClient
-from ..models import State, Task, TaskReview
+from ..models import State, TaskReview
 from ..persistence import save_state
 from ..cli.state import extract_pull_request_number
-from .options import Options
+from .options import ReviewPassOptions
 from .results import OperationResult
-
-@dataclass
-class ReviewPassOptions(Options):
-    task: Task
 
 class ReviewPassService:
     def __init__(self, state: State, client: JulesClient, github_client: GitHubClient, cwd: Path):
@@ -25,6 +20,7 @@ class ReviewPassService:
 
     def execute(self, options: ReviewPassOptions) -> OperationResult:
         task = options.task
+        output = options.output_func
 
         if task.status in ("merged", "pr_closed"):
             return OperationResult(exit_code=0, message=f"Task {task.id} is already in {task.status} status. Skipping review pass.")
@@ -37,6 +33,7 @@ class ReviewPassService:
             return OperationResult(exit_code=1, message=f"Error: Could not extract PR number from {task.pull_request.url}")
 
         repo = self.state.project.repo
+        output(f"Fetching head SHA for PR #{pull_number} in {repo}...")
         try:
             pr_data = self.github_client.get_pull_request(repo, pull_number)
             head_sha = pr_data.get("head", {}).get("sha")
@@ -58,4 +55,6 @@ class ReviewPassService:
         )
 
         save_state(self.cwd, self.state)
-        return OperationResult(exit_code=0, message=f"Task {task.id} marked as review_passed for head SHA {head_sha}.")
+        msg = f"Task {task.id} marked as review_passed for head SHA {head_sha}."
+        output(msg)
+        return OperationResult(exit_code=0, message=msg)

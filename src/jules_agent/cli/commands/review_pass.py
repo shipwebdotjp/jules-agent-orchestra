@@ -36,13 +36,13 @@ def handle_review_pass(
     sync_task_state(client, github_client, state, run, task, cwd)
 
     service = ReviewPassService(state, client, github_client, cwd)
-    options = ReviewPassOptions(task=task)
+    options = ReviewPassOptions(task=task, output_func=print)
 
     result = service.execute(options)
     if not result.success:
         raise OperationError(result.exit_code, result.message or "Review-pass failed")
 
     if result.message:
-        print(result.message)
+        options.output_func(result.message)
 
     return 0

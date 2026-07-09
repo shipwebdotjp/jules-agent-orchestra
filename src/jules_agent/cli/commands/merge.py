@@ -46,6 +46,7 @@ def handle_merge(
         merge_method=args.merge_method,
         delete_branch=getattr(args, "delete_branch", None),
         pull=getattr(args, "pull", None),
+        output_func=print,
     )
 
     result = service.execute(options)
@@ -53,6 +54,6 @@ def handle_merge(
         raise OperationError(result.exit_code, result.message or "Merge failed")
 
     if result.message:
-        print(result.message)
+        options.output_func(result.message)
 
     return 0
