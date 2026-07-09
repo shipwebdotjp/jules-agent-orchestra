@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, ListView, ListItem, Static, Label, Input, Button, RadioSet, RadioButton, RichLog
+from textual.widgets import Header, Footer, ListView, ListItem, Static, Label, Button, RadioSet, RadioButton, RichLog, TextArea
 from textual.containers import Horizontal, Vertical, Container, ScrollableContainer
 from textual.screen import ModalScreen, Screen
 from textual.binding import Binding
@@ -50,7 +50,7 @@ class TaskItem(ListItem):
         self.task_data = task
 
     def compose(self) -> ComposeResult:
-        yield Label(f"[{self.run.id}] {self.task_data.id}: {self.task_data.title} ({self.task_data.status})")
+        yield Label(f"[bold magenta][{self.run.id}][/] {self.task_data.id}: {self.task_data.title} ({self.task_data.status})")
 
 
 class DetailPane(Static):
@@ -78,15 +78,14 @@ class DetailPane(Static):
 
 
 class TextInputModal(ModalScreen[str]):
-    def __init__(self, title: str, placeholder: str = ""):
+    def __init__(self, title: str):
         super().__init__()
         self.title_text = title
-        self.placeholder = placeholder
 
     def compose(self) -> ComposeResult:
         yield Vertical(
             Label(self.title_text),
-            Input(placeholder=self.placeholder, id="modal_input"),
+            TextArea(id="modal_input", tab_behavior="focus"),
             Horizontal(
                 Button("Submit", variant="primary", id="submit"),
                 Button("Cancel", variant="error", id="cancel"),
@@ -96,12 +95,9 @@ class TextInputModal(ModalScreen[str]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "submit":
-            self.dismiss(self.query_one("#modal_input", Input).value)
+            self.dismiss(self.query_one("#modal_input", TextArea).text.strip())
         else:
             self.dismiss("")
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        self.dismiss(event.value)
 
     def on_mount(self) -> None:
         self.query_one("#modal_input").focus()
@@ -162,7 +158,7 @@ class PlanReviewModal(ModalScreen[Optional[str]]):
             Label("Plan Review"),
             ScrollableContainer(Static(plan_text), id="plan_scroll"),
             Label("Feedback (leave empty to approve):"),
-            Input(id="feedback_input"),
+            TextArea(id="feedback_input", tab_behavior="focus"),
             Horizontal(
                 Button("Confirm", variant="primary", id="confirm"),
                 Button("Cancel", variant="error", id="cancel"),
@@ -172,17 +168,13 @@ class PlanReviewModal(ModalScreen[Optional[str]]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "confirm":
-            feedback = self.query_one("#feedback_input", Input).value.strip()
+            feedback = self.query_one("#feedback_input", TextArea).text.strip()
             self.dismiss(feedback if feedback else None)
         else:
             self.dismiss("__CANCEL__")
 
     def on_mount(self) -> None:
         self.query_one("#feedback_input").focus()
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        feedback = event.value.strip()
-        self.dismiss(feedback if feedback else None)
 
 
 class JulesTUI(App):
@@ -234,6 +226,11 @@ class JulesTUI(App):
         border: solid $accent;
         margin-bottom: 1;
         padding: 1;
+    }
+
+    #modal_input, #feedback_input {
+        height: 5;
+        border: solid $accent;
     }
 
     ListItem {
@@ -518,7 +515,7 @@ class JulesTUI(App):
 
                 self.run_worker(do_feedback, thread=True)
 
-        self.push_screen(TextInputModal("Enter feedback for Jules:", ""), get_feedback)
+        self.push_screen(TextInputModal("Enter feedback for Jules:"), get_feedback)
 
     def action_send_msg(self) -> None:
         run, task = self.get_selected_task()
@@ -544,7 +541,7 @@ class JulesTUI(App):
 
                 self.run_worker(do_send, thread=True)
 
-        self.push_screen(TextInputModal("Enter message for Jules:", ""), send_msg)
+        self.push_screen(TextInputModal("Enter message for Jules:"), send_msg)
 
     def action_review(self) -> None:
         run, task = self.get_selected_task()
@@ -656,7 +653,7 @@ class JulesTUI(App):
             return
 
         def on_confirm(confirm: str):
-            if confirm.lower() in ("y", "yes"):
+            if confirm.strip().lower() in ("y", "yes"):
                 def do_delete():
                     service = DeleteService(self.state, self.cwd)
                     # Use DeleteOptions for single task deletion
@@ -667,7 +664,7 @@ class JulesTUI(App):
 
                 self.run_worker(do_delete, thread=True)
 
-        self.push_screen(TextInputModal(f"Delete task {task.id}? Type 'y' to confirm:", ""), on_confirm)
+        self.push_screen(TextInputModal(f"Delete task {task.id}? Type 'y' to confirm:"), on_confirm)
 
 def start_tui(state: State, client: JulesClient, github_client: GitHubClient | None, cwd: Path, config: Config) -> int:
     app = JulesTUI(state, client, github_client, cwd, config)
