@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import datetime
+import threading
 from pathlib import Path
 from typing import Any, List, Optional
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, ListView, ListItem, Static, Label, Input, Button
-from textual.containers import Horizontal, Vertical, Container
+from textual.widgets import Header, Footer, ListView, ListItem, Static, Label, Input, Button, RadioSet, RadioButton
+from textual.containers import Horizontal, Vertical, Container, ScrollableContainer
 from textual.screen import ModalScreen, Screen
 from textual.binding import Binding
 
-from ..models import State, Run, Task
+from ..models import State, Run, Task, ExecutionPlan
+from ..codex import resolve_tool_for_phase, SelectionCancelled, ClarificationQuestion
 from ..persistence import save_state
 from ..client import JulesClient
 from ..github import GitHubClient
@@ -93,6 +95,85 @@ class TextInputModal(ModalScreen[str]):
         self.query_one("#modal_input").focus()
 
 
+class ClarificationModal(ModalScreen[str]):
+    def __init__(self, question: ClarificationQuestion, round_idx: int, total_rounds: int):
+        super().__init__()
+        self.question_data = question
+        self.round_idx = round_idx
+        self.total_rounds = total_rounds
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(f"Clarification (Round {self.round_idx}/{self.total_rounds})"),
+            Label(self.question_data.question),
+            RadioSet(*[RadioButton(opt) for opt in self.question_data.options], id="options"),
+            Horizontal(
+                Button("Submit", variant="primary", id="submit"),
+                Button("Cancel", variant="error", id="cancel"),
+            ),
+            id="modal_container",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "submit":
+            rs = self.query_one("#options", RadioSet)
+            if rs.pressed_index >= 0:
+                self.dismiss(self.question_data.options[rs.pressed_index])
+            else:
+                self.notify("Please select an option", variant="error")
+        else:
+            self.dismiss("__CANCEL__")
+
+
+class PlanReviewModal(ModalScreen[Optional[str]]):
+    def __init__(self, plan: ExecutionPlan):
+        super().__init__()
+        self.plan = plan
+
+    def compose(self) -> ComposeResult:
+        plan_text = f"Strategy: {self.plan.strategy}\n\nTasks:\n"
+        for i, t in enumerate(self.plan.tasks, 1):
+            plan_text += f"{i}. {t.title}\n"
+            if t.details:
+                plan_text += f"   Details: {t.details}\n"
+            if t.acceptance_criteria:
+                plan_text += "   Acceptance Criteria:\n"
+                for ac in t.acceptance_criteria:
+                    plan_text += f"     - {ac}\n"
+            if t.out_of_scope:
+                plan_text += "   Out of Scope:\n"
+                for oos in t.out_of_scope:
+                    plan_text += f"     - {oos}\n"
+            plan_text += "\n"
+
+        yield Vertical(
+            Label("Plan Review"),
+            ScrollableContainer(Static(plan_text), id="plan_scroll"),
+            Label("Feedback (leave empty to approve):"),
+            Input(id="feedback_input"),
+            Horizontal(
+                Button("Confirm", variant="primary", id="confirm"),
+                Button("Cancel", variant="error", id="cancel"),
+            ),
+            id="modal_container_large",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm":
+            feedback = self.query_one("#feedback_input", Input).value.strip()
+            self.dismiss(feedback if feedback else None)
+        else:
+            self.dismiss("__CANCEL__")
+
+    def on_mount(self) -> None:
+        self.query_one("#feedback_input").focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "feedback_input":
+            feedback = event.value.strip()
+            self.dismiss(feedback if feedback else None)
+
+
 class JulesTUI(App):
     CSS = """
     #task_list {
@@ -114,6 +195,22 @@ class JulesTUI(App):
         align: center middle;
     }
 
+    #modal_container_large {
+        width: 80%;
+        height: 80%;
+        border: thick $primary;
+        padding: 1;
+        background: $panel;
+        align: center middle;
+    }
+
+    #plan_scroll {
+        height: 1fr;
+        border: solid $accent;
+        margin-bottom: 1;
+        padding: 1;
+    }
+
     ListItem {
         padding: 1;
     }
@@ -123,6 +220,8 @@ class JulesTUI(App):
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
         Binding("s", "sync", "Sync"),
+        Binding("p", "run_task", "Run Task"),
+        Binding("l", "toggle_filter", "Toggle Filter"),
         Binding("a", "approve", "Approve"),
         Binding("f", "feedback", "Feedback"),
         Binding("v", "review", "Review"),
@@ -141,6 +240,7 @@ class JulesTUI(App):
         self.github_client = github_client
         self.cwd = cwd
         self.config = config
+        self.show_all = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -167,6 +267,9 @@ class JulesTUI(App):
         # Sort runs by created_at descending
         sorted_runs = sorted(self.state.runs, key=lambda r: r.created_at or "", reverse=True)
 
+        if not self.show_all:
+            sorted_runs = [r for r in sorted_runs if r.status in ("planned", "running")]
+
         new_index = 0
         found_index = None
         for run in sorted_runs:
@@ -180,6 +283,11 @@ class JulesTUI(App):
             list_view.index = found_index
 
         self.update_detail()
+        self.update_title()
+
+    def update_title(self) -> None:
+        mode = "All" if self.show_all else "In-progress"
+        self.title = f"Jules Agent - {mode} Sessions"
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         self.update_detail()
@@ -209,6 +317,106 @@ class JulesTUI(App):
     async def action_refresh(self) -> None:
         self.refresh_list()
         self.notify("List refreshed")
+
+    def action_toggle_filter(self) -> None:
+        self.show_all = not self.show_all
+        self.refresh_list()
+        mode = "all" if self.show_all else "in-progress only"
+        self.notify(f"Filter toggled: showing {mode}")
+
+    def action_run_task(self) -> None:
+        def start_run(description: str):
+            if not description:
+                return
+
+            def do_run():
+                service = RunService(self.state, self.client, self.cwd)
+
+                # Callbacks for interactive flow
+                current_q_indices = [0, 0]
+
+                def render_clarification_question(question: ClarificationQuestion, idx: int, total: int):
+                    current_q_indices[0] = idx
+                    current_q_indices[1] = total
+
+                def prompt_for_clarification_answer(question: ClarificationQuestion) -> str:
+                    event = threading.Event()
+                    answer = "__CANCEL__"
+
+                    def on_answer(val: str):
+                        nonlocal answer
+                        answer = val
+                        event.set()
+
+                    self.call_from_thread(
+                        self.push_screen,
+                        ClarificationModal(question, current_q_indices[0], current_q_indices[1]),
+                        on_answer
+                    )
+                    event.wait()
+                    if answer == "__CANCEL__":
+                        raise SelectionCancelled()
+                    return answer
+
+                def render_plan(plan: ExecutionPlan):
+                    # Handled by prompt_for_review_func
+                    pass
+
+                def prompt_for_review() -> Optional[str]:
+                    # RunService calls decompose_task then this.
+                    # It needs to get ExecutionPlan. Unfortunately RunService doesn't pass it to this callback.
+                    # Wait, RunService.run_confirmation_loop_logic calls render_plan(plan) THEN prompt_for_review().
+                    # So we need to capture the plan in render_plan.
+
+                    event = threading.Event()
+                    feedback = "__CANCEL__"
+
+                    def on_review(val: Optional[str]):
+                        nonlocal feedback
+                        feedback = val
+                        event.set()
+
+                    # We need the plan here. Let's modify do_run to capture it.
+                    self.call_from_thread(self.push_screen, PlanReviewModal(current_plan[0]), on_review)
+                    event.wait()
+                    if feedback == "__CANCEL__":
+                        raise SelectionCancelled()
+                    return feedback
+
+                current_plan = [None]
+                def capture_plan(plan: ExecutionPlan):
+                    current_plan[0] = plan
+
+                tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("run", self.config)
+
+                options = RunOptions(
+                    task_description=description,
+                    no_confirm=False,
+                    auto_plan_approval=self.config.auto_plan_approval,
+                    automation_mode=self.config.automation_mode,
+                    tool_name=tool_name,
+                    tool_bin=tool_bin,
+                    gemini_skip_trust=gemini_skip_trust,
+                    output_func=self.notify,
+                    render_clarification_question_func=render_clarification_question,
+                    prompt_for_clarification_answer_func=prompt_for_clarification_answer,
+                    render_plan_func=capture_plan,
+                    prompt_for_review_func=prompt_for_review,
+                )
+
+                try:
+                    service.execute(options)
+                    self.notify("Plan created and dispatched")
+                except SelectionCancelled:
+                    self.notify("Plan creation cancelled")
+                except Exception as e:
+                    self.notify(f"Error creating plan: {e}", variant="error")
+
+                self.call_from_thread(self.refresh_list)
+
+            self.run_worker(do_run, thread=True)
+
+        self.push_screen(TextInputModal("Enter task description:"), start_run)
 
     def action_sync(self) -> None:
         def do_sync():
