@@ -355,6 +355,8 @@ def main(argv: list[str] | None = None) -> int:
         format="%(message)s",
         stream=sys.stderr,
     )
+    # Silence httpx logs at INFO level
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     set_debug(debug_enabled)
 
     api_key = os.environ.get("JULES_API_KEY") or config.api_key
