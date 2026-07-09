@@ -33,10 +33,10 @@ class TaskItem(ListItem):
     def __init__(self, run: Run, task: Task):
         super().__init__()
         self.run = run
-        self.task = task
+        self.task_data = task
 
     def compose(self) -> ComposeResult:
-        yield Label(f"[{self.run.id}] {self.task.id}: {self.task.title} ({self.task.status})")
+        yield Label(f"[{self.run.id}] {self.task_data.id}: {self.task_data.title} ({self.task_data.status})")
 
 
 class DetailPane(Static):
@@ -160,7 +160,7 @@ class JulesTUI(App):
         current_task_id = None
         if list_view.highlighted_child and isinstance(list_view.highlighted_child, TaskItem):
             current_run_id = list_view.highlighted_child.run.id
-            current_task_id = list_view.highlighted_child.task.id
+            current_task_id = list_view.highlighted_child.task_data.id
 
         list_view.clear()
 
@@ -194,7 +194,7 @@ class JulesTUI(App):
         if list_view.highlighted_child:
             item = list_view.highlighted_child
             if isinstance(item, TaskItem):
-                detail_pane.update_detail(item.run, item.task)
+                detail_pane.update_detail(item.run, item.task_data)
         else:
             detail_pane.update_detail(None, None)
 
@@ -203,7 +203,7 @@ class JulesTUI(App):
         if list_view.highlighted_child:
             item = list_view.highlighted_child
             if isinstance(item, TaskItem):
-                return item.run, item.task
+                return item.run, item.task_data
         return None, None
 
     async def action_refresh(self) -> None:
