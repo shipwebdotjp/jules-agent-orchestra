@@ -293,6 +293,11 @@ class JulesTUI(App):
         self.config = config
         self.show_all = False
         self._spinner_msg = ""
+        self._jules_logger = logging.getLogger("jules_agent")
+
+    def _log_and_notify(self, msg: str) -> None:
+        self._jules_logger.info(msg)
+        self.notify(msg)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -496,7 +501,7 @@ class JulesTUI(App):
                     tool_name=tool_name,
                     tool_bin=tool_bin,
                     gemini_skip_trust=gemini_skip_trust,
-                    output_func=self.notify,
+                    output_func=self._log_and_notify,
                     render_clarification_question_func=render_clarification_question,
                     prompt_for_clarification_answer_func=prompt_for_clarification_answer,
                     render_plan_func=capture_plan,
@@ -520,7 +525,7 @@ class JulesTUI(App):
     def action_sync(self) -> None:
         def do_sync():
             service = SyncService(self.state, self.client, self.github_client, self.cwd)
-            options = SyncOptions(output_func=self.notify)
+            options = SyncOptions(output_func=self._log_and_notify)
             service.execute(options)
             self.call_from_thread(self.refresh_list)
             self.notify("Synced with Jules/GitHub")
@@ -693,7 +698,7 @@ class JulesTUI(App):
         def do_retry():
             service = RetryService(self.state, self.client, self.cwd, self.config)
             # RetryOptions accepts output_func
-            options = RetryOptions(run=run, task=task, output_func=self.notify)
+            options = RetryOptions(run=run, task=task, output_func=self._log_and_notify)
             result = service.execute(options)
             if result.success:
                 self.notify("Retry initiated")
@@ -712,7 +717,7 @@ class JulesTUI(App):
             if confirmed:
                 def do_delete():
                     service = DeleteService(self.state, self.cwd)
-                    options = DeleteOptions(target_run=run, target_task=task, yes=True, output_func=self.notify)
+                    options = DeleteOptions(target_run=run, target_task=task, yes=True, output_func=self._log_and_notify)
                     result = service.delete_task(options)
                     self.notify(result.message or "Deleted")
                     self.call_from_thread(self.refresh_list)
