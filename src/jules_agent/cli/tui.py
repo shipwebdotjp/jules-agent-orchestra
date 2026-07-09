@@ -282,16 +282,20 @@ class JulesTUI(App):
         handler = TUILogHandler(log_pane, self)
         handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"))
 
-        root_logger = logging.getLogger("jules_agent")
-        root_logger.addHandler(handler)
+        jules_logger = logging.getLogger("jules_agent")
+        jules_logger.addHandler(handler)
+        self._old_propagate = jules_logger.propagate
+        jules_logger.propagate = False
         self._log_handler = handler
 
         self.refresh_list()
 
     def on_unmount(self) -> None:
         if hasattr(self, "_log_handler"):
-            root_logger = logging.getLogger("jules_agent")
-            root_logger.removeHandler(self._log_handler)
+            jules_logger = logging.getLogger("jules_agent")
+            jules_logger.removeHandler(self._log_handler)
+            if hasattr(self, "_old_propagate"):
+                jules_logger.propagate = self._old_propagate
 
     def refresh_list(self) -> None:
         list_view = self.query_one("#task_list", ListView)

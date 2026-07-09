@@ -35,7 +35,7 @@ class JulesClient:
         params: dict[str, Any] = {}
 
         while True:
-            logger.debug(f"Jules API request: GET {url}")
+            logger.debug(f"Jules API request: GET {url} params={params}")
             with httpx.Client() as client:
                 response = client.get(url, headers=self.headers, params=params)
             logger.debug(f"Jules API response: {response.status_code}")
@@ -100,7 +100,7 @@ class JulesClient:
         params: dict[str, Any] = {}
 
         while True:
-            logger.debug(f"Jules API request: GET {url}")
+            logger.debug(f"Jules API request: GET {url} params={params}")
             with httpx.Client() as client:
                 response = client.get(url, headers=self.headers, params=params)
             logger.debug(f"Jules API response: {response.status_code}")
