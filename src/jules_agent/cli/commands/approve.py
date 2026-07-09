@@ -28,15 +28,19 @@ def handle_approve(
         task_id_for_print = f"{run.id}:{task.id}"
 
     service = ApproveService(state, client, cwd)
-    options = ApproveOptions(run=run, task=task, task_id_for_print=task_id_for_print)
+    options = ApproveOptions(
+        run=run,
+        task=task,
+        task_id_for_print=task_id_for_print,
+        output_func=print,
+    )
 
-    print(f"Approving plan for task {task_id_for_print}...")
     result = service.execute(options)
 
     if not result.success:
         raise OperationError(result.exit_code, result.message or "Approval failed")
 
     if result.message:
-        print(result.message)
+        options.output_func(result.message)
 
     return 0

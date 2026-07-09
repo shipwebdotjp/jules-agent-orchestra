@@ -39,15 +39,15 @@ def handle_send(
         task=task,
         message=message,
         task_id_for_print=task_id_for_print,
+        output_func=print,
     )
 
-    print(f"Sending message to task {task_id_for_print}...")
     result = service.execute(options)
 
     if not result.success:
         raise OperationError(result.exit_code, result.message or "Send failed")
 
     if result.message:
-        print(result.message)
+        options.output_func(result.message)
 
     return 0
