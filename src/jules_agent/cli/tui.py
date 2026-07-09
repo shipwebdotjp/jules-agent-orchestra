@@ -169,9 +169,8 @@ class PlanReviewModal(ModalScreen[Optional[str]]):
         self.query_one("#feedback_input").focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "feedback_input":
-            feedback = event.value.strip()
-            self.dismiss(feedback if feedback else None)
+        feedback = event.value.strip()
+        self.dismiss(feedback if feedback else None)
 
 
 class JulesTUI(App):
@@ -387,13 +386,14 @@ class JulesTUI(App):
                 def capture_plan(plan: ExecutionPlan):
                     current_plan[0] = plan
 
-                tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("run", self.config)
+                tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", self.config)
+                automation_mode = self.config.automation_mode or "AUTO_CREATE_PR"
 
                 options = RunOptions(
                     task_description=description,
                     no_confirm=False,
                     auto_plan_approval=self.config.auto_plan_approval,
-                    automation_mode=self.config.automation_mode,
+                    automation_mode=automation_mode,
                     tool_name=tool_name,
                     tool_bin=tool_bin,
                     gemini_skip_trust=gemini_skip_trust,
