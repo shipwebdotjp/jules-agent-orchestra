@@ -89,7 +89,7 @@ class TextInputModal(ModalScreen[str]):
             Input(placeholder=self.placeholder, id="modal_input"),
             Horizontal(
                 Button("Submit", variant="primary", id="submit"),
-                Button("Cancel", variant="error", id="cancel"),
+                Button("Cancel", severity="error", id="cancel"),
             ),
             id="modal_container",
         )
@@ -494,7 +494,7 @@ class JulesTUI(App):
             return
 
         if not task.jules:
-            self.notify("Error: Task has not been dispatched yet.", variant="error")
+            self.notify("Error: Task has not been dispatched yet.", severity="error")
             return
 
         def get_feedback(feedback: str):
@@ -513,7 +513,7 @@ class JulesTUI(App):
                     if result.success:
                         self.notify("Feedback sent")
                     else:
-                        self.notify(result.message or "Failed to send feedback", variant="error")
+                        self.notify(result.message or "Failed to send feedback", severity="error")
                     self.call_from_thread(self.refresh_list)
 
                 self.run_worker(do_feedback, thread=True)
@@ -539,7 +539,7 @@ class JulesTUI(App):
                     if result.success:
                         self.notify("Message sent")
                     else:
-                        self.notify(result.message or "Failed to send message", variant="error")
+                        self.notify(result.message or "Failed to send message", severity="error")
                     self.call_from_thread(self.refresh_list)
 
                 self.run_worker(do_send, thread=True)
@@ -558,7 +558,7 @@ class JulesTUI(App):
             if result.success:
                 self.notify("Review completed")
             else:
-                self.notify(result.message or "Review failed", variant="error")
+                self.notify(result.message or "Review failed", severity="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_review, thread=True)
@@ -575,7 +575,7 @@ class JulesTUI(App):
             if result.success:
                 self.notify("Review-pass completed")
             else:
-                self.notify(result.message or "Review-pass failed", variant="error")
+                self.notify(result.message or "Review-pass failed", severity="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_review_pass, thread=True)
@@ -599,7 +599,7 @@ class JulesTUI(App):
             if result.success:
                 self.notify("Merge completed")
             else:
-                self.notify(result.message or "Merge failed", variant="error")
+                self.notify(result.message or "Merge failed", severity="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_merge, thread=True)
@@ -612,7 +612,7 @@ class JulesTUI(App):
         # NextService needs a planned task to dispatch
         planned_tasks = [t for t in run.tasks if t.status == "planned"]
         if not planned_tasks:
-            self.notify("No planned tasks to dispatch in this run.", variant="error")
+            self.notify("No planned tasks to dispatch in this run.", severity="error")
             return
 
         task_to_dispatch = planned_tasks[0]
@@ -627,7 +627,7 @@ class JulesTUI(App):
             if result.success:
                 self.notify(f"Dispatched {task_to_dispatch.id}")
             else:
-                self.notify(result.message or "Next dispatch failed", variant="error")
+                self.notify(result.message or "Next dispatch failed", severity="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_next, thread=True)
@@ -645,7 +645,7 @@ class JulesTUI(App):
             if result.success:
                 self.notify("Retry initiated")
             else:
-                self.notify(result.message or "Retry failed", variant="error")
+                self.notify(result.message or "Retry failed", severity="error")
             self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_retry, thread=True)
