@@ -64,6 +64,8 @@ After installing, the `jules-agent` command is available on your `PATH`.
 jules-agent [flags] <command> [args]
 ```
 
+If you run `jules-agent` without a command in an interactive terminal, it opens a full-screen TUI dashboard where you can view and manage your runs and tasks.
+
 The common flow is:
 
 1. Create a task with `run`.

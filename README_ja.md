@@ -64,6 +64,8 @@ pip install -e .
 jules-agent [flags] <command> [args]
 ```
 
+引数なしで `jules-agent` を起動すると（かつ対話可能なターミナルの場合）、全画面の TUI ダッシュボードが開き、run や task の一覧確認と操作が行えます。
+
 基本的な流れは次のとおりです。
 
 1. `run` でタスクを作成する
