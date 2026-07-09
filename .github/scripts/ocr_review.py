@@ -79,8 +79,17 @@ OCR review is currently in progress...
     post_or_update_comment(in_progress_body)
 
     # Run OCR review
-    # Construct background text from PR title and body
-    background_text = f"Title: {pr_data.get('title', '')}\n\nDescription: {pr_data.get('body', '')}"
+    # Construct background text mirroring build_ocr_background_text
+    background_lines = [
+        f"Title: {pr_data.get('title', '')}",
+        f"Description: {pr_data.get('body', '')}",
+        "Prompt: ",
+        "",
+        "Acceptance Criteria:",
+        "",
+        "Out of Scope:",
+    ]
+    background_text = "\n".join(background_lines)
 
     ocr_args = [
         "ocr", "review",
@@ -88,6 +97,7 @@ OCR review is currently in progress...
         "--to", head_sha,
         "--format", "json",
         "--audience", "agent",
+        "--repo", ".",
         "--background", background_text
     ]
 
@@ -95,20 +105,39 @@ OCR review is currently in progress...
         completed = subprocess.run(ocr_args, capture_output=True, text=True, check=True)
         output_text = completed.stdout.strip()
         # Find JSON block in output
-        start_idx = output_text.find("{")
-        end_idx = output_text.rfind("}")
+        start_idx = output_text.find("[")
+        obj_start_idx = output_text.find("{")
+
+        if obj_start_idx != -1 and (start_idx == -1 or obj_start_idx < start_idx):
+             start_idx = obj_start_idx
+
+        end_idx = output_text.rfind("]")
+        obj_end_idx = output_text.rfind("}")
+        if obj_end_idx != -1 and (end_idx == -1 or obj_end_idx > end_idx):
+            end_idx = obj_end_idx
+
         if start_idx != -1 and end_idx != -1:
             payload = json.loads(output_text[start_idx:end_idx+1])
         else:
             payload = {"findings": []}
 
-        findings = payload.get("findings", [])
-        if not isinstance(findings, list):
-            findings = []
+        if isinstance(payload, list):
+            raw_findings = payload
+            summary = "OCR review found issues that need attention." if raw_findings else "OCR review passed with no findings."
+        elif isinstance(payload, dict):
+            raw_findings = payload.get("findings", [])
+            summary = payload.get("summary") or ("OCR review found issues that need attention." if raw_findings else "OCR review passed with no findings.")
+        else:
+            raw_findings = []
+            summary = "OCR review passed with no findings."
+
+        if not isinstance(raw_findings, list):
+            raw_findings = []
 
         # Normalize findings
         normalized_findings = []
-        for f in findings:
+        for f in raw_findings:
+            if not isinstance(f, dict): continue
             path = f.get("path") or f.get("file") or ""
             line = f.get("start_line") or f.get("line") or 0
             content = f.get("content") or f.get("message") or ""
@@ -116,10 +145,8 @@ OCR review is currently in progress...
 
         if normalized_findings:
             status = "❌ Changes Requested"
-            summary = payload.get("summary") or "OCR review found issues that need attention."
         else:
             status = "✅ Passed"
-            summary = payload.get("summary") or "OCR review passed with no findings."
 
         final_body = f"""## OCR Review Results {status[0]}
 - **Status**: {status[2:]}

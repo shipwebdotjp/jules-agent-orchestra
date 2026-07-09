@@ -23,7 +23,13 @@ jobs:
 
       - name: Fetch PR refs
         run: |
-          gh pr checkout ${{ github.event.issue.number }}
+          PR_NUMBER=${{ github.event.issue.number }}
+          git fetch origin pull/$PR_NUMBER/head:pr-$PR_NUMBER
+          git checkout pr-$PR_NUMBER
+
+          # Fetch the base ref so we can diff against it
+          BASE_REF=$(gh pr view $PR_NUMBER --json baseRefName --template '{{.baseRefName}}')
+          git fetch origin $BASE_REF
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
