@@ -34,6 +34,7 @@ from .review import (
     get_review_diff,
     is_task_eligible_for_review,
     run_codex_review,
+    run_ocr_review,
     update_sticky_comment,
 )
 
@@ -659,47 +660,6 @@ def perform_task_review(
     base_sha = pr_data["base"]["sha"]
     head_sha = pr_data["head"]["sha"]
 
-    previous_head_sha = None
-    if task.review and task.review.attempts:
-        previous_head_sha = task.review.attempts[-1].head_sha
-
-    logger.info(f"Generating diff for task {task.id} (PR #{issue_number})...")
-    diff = get_review_diff(cwd, repo, base_sha, head_sha, previous_head_sha, github_client)
-    if not diff.strip():
-        raise PipelineError("Generated diff is empty. Nothing to review.")
-
-    prompt = (
-        f"You are performing a first-pass code review for the following task.\n\n"
-        f"## Task\n"
-        f"**Title:** {task.title}\n"
-        f"**Description:** {task.description}\n"
-        f"**Plan:** {task.prompt}\n\n"
-        f"**Acceptance Criteria:**\n"
-        f"{task.acceptance_criteria}\n\n"
-        f"**Out of Scope:**\n"
-        f"{task.out_of_scope}\n\n"
-        f"## Diff\n"
-        f"```diff\n{diff}\n```\n\n"
-        f"## Review Criteria\n"
-        f"Before raising a finding, confirm that ALL of the following conditions are met:\n"
-        f"1. It clearly violates the task description or acceptance criteria, "
-        f"OR the diff demonstrably breaks existing functionality, "
-        f"OR it will highly likely cause an exception, incorrect behavior, or data corruption during normal execution.\n"
-        f"2. The fix is entirely within the scope of this PR (no external changes required).\n"
-        f"3. The implementer can fix it without additional design decisions.\n\n"
-        f"Do NOT report findings for: style preferences, naming conventions, "
-        f"speculative edge cases, architectural suggestions, or anything requiring "
-        f"changes outside this PR.\n\n"
-        f"## Output Format\n"
-        f"Return a JSON object with:\n"
-        f"- `status`: 'pass' if no findings, 'changes_requested' if there are findings\n"
-        f"- `summary`: brief overall assessment\n"
-        f"- `findings`: list of {{file, line, message}} — only include if criteria above are met\n"
-        f"  `file` MUST be a path relative to the repository root "
-        f"(e.g. `src/jules_agent/review.py`), never an absolute path.\n"
-        f"- `next_steps`: concrete next action for the implementer\n"
-    )
-
     logger.info(f"Posting 'In Progress' sticky comment for task {task.id}...")
     in_progress_body = format_review_sticky_comment(
         task=task,
@@ -718,13 +678,63 @@ def perform_task_review(
     save_state(cwd, state)
 
     try:
-        result = run_codex_review(
-            prompt,
-            cwd=cwd,
-            tool_name=tool_name,
-            tool_bin=tool_bin,
-            gemini_skip_trust=gemini_skip_trust,
-        )
+        if tool_name.lower() == "ocr":
+            result = run_ocr_review(
+                task=task,
+                base_sha=base_sha,
+                head_sha=head_sha,
+                cwd=cwd,
+                tool_bin=tool_bin,
+            )
+        else:
+            previous_head_sha = None
+            if task.review and task.review.attempts:
+                previous_head_sha = task.review.attempts[-1].head_sha
+
+            logger.info(f"Generating diff for task {task.id} (PR #{issue_number})...")
+            diff = get_review_diff(cwd, repo, base_sha, head_sha, previous_head_sha, github_client)
+            if not diff.strip():
+                raise PipelineError("Generated diff is empty. Nothing to review.")
+
+            prompt = (
+                f"You are performing a first-pass code review for the following task.\n\n"
+                f"## Task\n"
+                f"**Title:** {task.title}\n"
+                f"**Description:** {task.description}\n"
+                f"**Plan:** {task.prompt}\n\n"
+                f"**Acceptance Criteria:**\n"
+                f"{task.acceptance_criteria}\n\n"
+                f"**Out of Scope:**\n"
+                f"{task.out_of_scope}\n\n"
+                f"## Diff\n"
+                f"```diff\n{diff}\n```\n\n"
+                f"## Review Criteria\n"
+                f"Before raising a finding, confirm that ALL of the following conditions are met:\n"
+                f"1. It clearly violates the task description or acceptance criteria, "
+                f"OR the diff demonstrably breaks existing functionality, "
+                f"OR it will highly likely cause an exception, incorrect behavior, or data corruption during normal execution.\n"
+                f"2. The fix is entirely within the scope of this PR (no external changes required).\n"
+                f"3. The implementer can fix it without additional design decisions.\n\n"
+                f"Do NOT report findings for: style preferences, naming conventions, "
+                f"speculative edge cases, architectural suggestions, or anything requiring "
+                f"changes outside this PR.\n\n"
+                f"## Output Format\n"
+                f"Return a JSON object with:\n"
+                f"- `status`: 'pass' if no findings, 'changes_requested' if there are findings\n"
+                f"- `summary`: brief overall assessment\n"
+                f"- `findings`: list of {{file, line, message}} — only include if criteria above are met\n"
+                f"  `file` MUST be a path relative to the repository root "
+                f"(e.g. `src/jules_agent/review.py`), never an absolute path.\n"
+                f"- `next_steps`: concrete next action for the implementer\n"
+            )
+
+            result = run_codex_review(
+                prompt,
+                cwd=cwd,
+                tool_name=tool_name,
+                tool_bin=tool_bin,
+                gemini_skip_trust=gemini_skip_trust,
+            )
     except Exception as e:
         # Post error sticky comment
         error_body = format_review_sticky_comment(

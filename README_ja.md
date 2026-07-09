@@ -193,8 +193,14 @@ stateDiagram-v2
 - `--review-tool <name>`: レビューフェーズで使う tool を上書きする
 - `--config /path/to/config.toml`: カスタム設定ファイルを指定する
 
-対応している backend tool は `codex`、`claude`、`gemini`、`opencode`、`copilot`、`cline` です。
+対応している backend tool は `codex`、`claude`、`gemini`、`opencode`、`copilot`、`cline`、および `ocr` (レビュー専用) です。
 `--tool` で既定の backend を指定するか、`--plan-tool`、`--approve-tool`、`--feedback-tool`、`--review-tool` で各フェーズを個別に上書きできます。
+
+※ `ocr` ツールはレビューフェーズ専用に制限されています。例えば、次のように `ocr` を使ってレビューを実行できます。
+```bash
+jules-agent review --tool ocr
+```
+`ocr` コマンドを使用するには、事前に `ocr` CLI のセットアップと LLM 設定が別途必要になります。
 
 `--tool-bin` フラグと `tool_bin` 設定項目で、特定の backend バイナリを指定できます。
 

@@ -178,8 +178,14 @@ stateDiagram-v2
 - `--review-tool <name>`: Tool override for the review phase.
 - `--config /path/to/config.toml`: Specify a custom configuration file.
 
-Supported backend tools are `codex`, `claude`, `gemini`, `opencode`, `copilot`, and `cline`.
+Supported backend tools are `codex`, `claude`, `gemini`, `opencode`, `copilot`, `cline`, and `ocr` (review-only).
 Use `--tool` to set one default backend, or override individual phases with `--plan-tool`, `--approve-tool`, `--feedback-tool`, and `--review-tool`.
+
+Note: The `ocr` tool is restricted to the review phase. For example, you can run a review with `ocr`:
+```bash
+jules-agent review --tool ocr
+```
+Using the `ocr` tool requires the `ocr` CLI and any relevant LLM settings to be configured separately in your environment.
 
 The `--tool-bin` flag and `tool_bin` config field let you point at a specific backend binary.
 
