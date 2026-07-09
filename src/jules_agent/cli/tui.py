@@ -89,7 +89,7 @@ class TextInputModal(ModalScreen[str]):
             Input(placeholder=self.placeholder, id="modal_input"),
             Horizontal(
                 Button("Submit", variant="primary", id="submit"),
-                Button("Cancel", severity="error", id="cancel"),
+                Button("Cancel", variant="error", id="cancel"),
             ),
             id="modal_container",
         )
