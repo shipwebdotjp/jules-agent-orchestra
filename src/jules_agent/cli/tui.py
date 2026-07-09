@@ -95,7 +95,7 @@ class TextInputModal(ModalScreen[str]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "submit":
-            self.dismiss(self.query_one("#modal_input", TextArea).text)
+            self.dismiss(self.query_one("#modal_input", TextArea).text.strip())
         else:
             self.dismiss("")
 
@@ -228,7 +228,7 @@ class JulesTUI(App):
         padding: 1;
     }
 
-    TextArea {
+    #modal_input, #feedback_input {
         height: 5;
         border: solid $accent;
     }
@@ -653,7 +653,7 @@ class JulesTUI(App):
             return
 
         def on_confirm(confirm: str):
-            if confirm.lower() in ("y", "yes"):
+            if confirm.strip().lower() in ("y", "yes"):
                 def do_delete():
                     service = DeleteService(self.state, self.cwd)
                     # Use DeleteOptions for single task deletion
