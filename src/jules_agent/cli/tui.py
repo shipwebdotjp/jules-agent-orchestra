@@ -13,6 +13,7 @@ from textual.screen import ModalScreen, Screen
 from textual.binding import Binding
 
 from ..models import State, Run, Task, ExecutionPlan
+from ..spinner import set_status_callback
 from ..codex import resolve_tool_for_phase, SelectionCancelled, ClarificationQuestion
 from ..persistence import save_state
 from ..client import JulesClient
@@ -236,6 +237,13 @@ class JulesTUI(App):
     ListItem {
         padding: 1;
     }
+
+    #status_bar {
+        height: 1;
+        background: $accent;
+        color: $text;
+        content-align: center middle;
+    }
     """
 
     BINDINGS = [
@@ -271,6 +279,7 @@ class JulesTUI(App):
                 yield ListView(id="task_list")
                 yield DetailPane(id="right_pane")
             yield RichLog(id="log_pane", highlight=True, markup=True)
+            yield Static(id="status_bar")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -285,14 +294,20 @@ class JulesTUI(App):
         jules_logger.propagate = False
         self._log_handler = handler
 
+        set_status_callback(lambda msg: self.call_from_thread(self._update_status, msg))
+
         self.refresh_list()
 
     def on_unmount(self) -> None:
+        set_status_callback(None)
         if hasattr(self, "_log_handler"):
             jules_logger = logging.getLogger("jules_agent")
             jules_logger.removeHandler(self._log_handler)
             if hasattr(self, "_old_propagate"):
                 jules_logger.propagate = self._old_propagate
+
+    def _update_status(self, msg: str) -> None:
+        self.query_one("#status_bar", Static).update(msg)
 
     def refresh_list(self) -> None:
         list_view = self.query_one("#task_list", ListView)

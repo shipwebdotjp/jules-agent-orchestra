@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .git import CommandRunner, is_git_repo, run_command
+from .spinner import spinner
 
 logger = logging.getLogger("jules_agent")
 
@@ -384,7 +385,9 @@ def call_backend(
     else:
         adapter = adapter_cls()
 
-    return adapter.exec(prompt, schema, cwd, runner)
+    tool_label = display_tool_name(tool_name)
+    with spinner(f"Running {tool_label}..."):
+        return adapter.exec(prompt, schema, cwd, runner)
 
 
 def resolve_tool_for_phase(
