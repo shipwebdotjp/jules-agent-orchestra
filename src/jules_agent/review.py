@@ -95,6 +95,21 @@ def format_review_sticky_comment(
         "",
     ]
 
+    if findings:
+        lines.append("### Findings")
+        for f in findings:
+            file = f.get("file") or ""
+            line = f.get("line")
+            msg = f.get("message")
+            line_info = f" (line {line})" if line else ""
+            lines.append(f"- **{file}**{line_info}: {msg}")
+        lines.append("")
+
+    if next_steps:
+        lines.append("### Next Steps")
+        lines.append(next_steps)
+        lines.append("")
+
     return "\n".join(lines)
 
 
