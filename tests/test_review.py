@@ -175,3 +175,183 @@ def test_cli_parser_review():
     args = parser.parse_args(["review", "run_20240101_001:t1"])
     assert args.command == "review"
     assert args.task_id == "run_20240101_001:t1"
+
+def test_resolve_tool_for_phase_ocr_guard():
+    from jules_agent.codex import resolve_tool_for_phase, PipelineError
+
+    # Resolve ocr tool for review phase - should succeed
+    class MockConfigReview:
+        review_tool = "ocr"
+
+    tool_name, tool_bin, _ = resolve_tool_for_phase("review", MockConfigReview())
+    assert tool_name == "ocr"
+
+    # Resolve ocr tool for plan phase - should raise PipelineError
+    class MockConfigPlan:
+        plan_tool = "ocr"
+
+    with pytest.raises(PipelineError) as excinfo:
+        resolve_tool_for_phase("plan", MockConfigPlan())
+    assert "The 'ocr' tool can only be used during the 'review' phase" in str(excinfo.value)
+
+def test_build_ocr_background_text():
+    from jules_agent.review import build_ocr_background_text
+
+    task = Task(
+        id="t1",
+        title="My Title",
+        description="My Desc",
+        prompt="My Prompt",
+        acceptance_criteria=["Criteria 1", "Criteria 2"],
+        out_of_scope=["OOS 1"],
+        created_at="...",
+        updated_at="...",
+        status="planned"
+    )
+
+    bg_text = build_ocr_background_text(task)
+    assert "Title: My Title" in bg_text
+    assert "Description: My Desc" in bg_text
+    assert "Prompt: My Prompt" in bg_text
+    assert "Acceptance Criteria:" in bg_text
+    assert "- Criteria 1" in bg_text
+    assert "- Criteria 2" in bg_text
+    assert "Out of Scope:" in bg_text
+    assert "- OOS 1" in bg_text
+
+def test_run_ocr_review_success_dictionary():
+    from jules_agent.review import run_ocr_review
+    from pathlib import Path
+
+    task = Task(
+        id="t1",
+        title="OCR Title",
+        description="OCR Desc",
+        prompt="OCR Prompt",
+        created_at="...",
+        updated_at="...",
+        status="planned"
+    )
+
+    ocr_output_json = {
+        "summary": "This is a summary",
+        "findings": [
+            {
+                "path": "src/main.py",
+                "start_line": 10,
+                "content": "Fix this bug",
+                "severity": "high",
+                "category": "bug"
+            },
+            {
+                "file": "tests/test_main.py",
+                "line": "25",
+                "message": "Unused import",
+                "severity": "low"
+            }
+        ]
+    }
+
+    mock_runner = MagicMock()
+    mock_runner.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(ocr_output_json),
+        stderr=""
+    )
+
+    result = run_ocr_review(
+        task=task,
+        base_sha="base123",
+        head_sha="head123",
+        cwd=Path("/app"),
+        tool_bin="custom-ocr-bin",
+        runner=mock_runner
+    )
+
+    # Verify command execution args
+    mock_runner.assert_called_once()
+    args, kwargs = mock_runner.call_args
+    called_cmd = args[0]
+    assert called_cmd[0] == "custom-ocr-bin"
+    assert "review" in called_cmd
+    assert "--from" in called_cmd
+    assert "base123" in called_cmd
+    assert "--to" in called_cmd
+    assert "head123" in called_cmd
+
+    # Verify result mapping/normalization
+    assert result["status"] == "changes_requested"
+    assert result["summary"] == "This is a summary"
+    assert result["next_steps"] == "Please fix the findings listed above."
+
+    findings = result["findings"]
+    assert len(findings) == 2
+    assert findings[0]["file"] == "src/main.py"
+    assert findings[0]["line"] == 10
+    assert findings[0]["message"] == "[high][bug] Fix this bug"
+
+    assert findings[1]["file"] == "tests/test_main.py"
+    assert findings[1]["line"] == 25
+    assert findings[1]["message"] == "[low] Unused import"
+
+def test_run_ocr_review_success_list_no_findings():
+    from jules_agent.review import run_ocr_review
+    from pathlib import Path
+
+    task = Task(
+        id="t1",
+        title="OCR Title",
+        created_at="...",
+        updated_at="...",
+        status="planned"
+    )
+
+    mock_runner = MagicMock()
+    mock_runner.return_value = MagicMock(
+        returncode=0,
+        stdout="[]",
+        stderr=""
+    )
+
+    result = run_ocr_review(
+        task=task,
+        base_sha="base123",
+        head_sha="head123",
+        cwd=Path("/app"),
+        runner=mock_runner
+    )
+
+    assert result["status"] == "pass"
+    assert result["summary"] == "OCR review passed with no findings."
+    assert result["findings"] == []
+    assert result["next_steps"] == "No action needed."
+
+def test_run_ocr_review_failure():
+    from jules_agent.review import run_ocr_review
+    from jules_agent.codex import PipelineError
+    from pathlib import Path
+
+    task = Task(
+        id="t1",
+        title="OCR Title",
+        created_at="...",
+        updated_at="...",
+        status="planned"
+    )
+
+    mock_runner = MagicMock()
+    mock_runner.return_value = MagicMock(
+        returncode=1,
+        stdout="Error occurred",
+        stderr="Unable to parse repo"
+    )
+
+    with pytest.raises(PipelineError) as excinfo:
+        run_ocr_review(
+            task=task,
+            base_sha="base123",
+            head_sha="head123",
+            cwd=Path("/app"),
+            runner=mock_runner
+        )
+    assert "OCR review failed with exit code 1" in str(excinfo.value)

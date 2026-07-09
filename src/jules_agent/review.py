@@ -6,8 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .codex import call_backend, PipelineError
-from .codex import display_tool_name
+from .codex import call_backend, PipelineError, display_tool_name, parse_json_document, debug_command
 from .git import CommandRunner, run_command
 from .github import GitHubClient
 from .models import State, Task, TaskReview, TaskReviewAttempt
@@ -284,3 +283,122 @@ def run_codex_review(
         raise PipelineError(f"{tool_label} review failed: payload is not a dictionary.")
 
     return payload
+
+
+def build_ocr_background_text(task: Task) -> str:
+    lines = [
+        f"Title: {task.title or ''}",
+        f"Description: {task.description or ''}",
+        f"Prompt: {task.prompt or ''}",
+        "",
+        "Acceptance Criteria:",
+    ]
+    if task.acceptance_criteria:
+        for item in task.acceptance_criteria:
+            lines.append(f"- {item}")
+    lines.append("")
+    lines.append("Out of Scope:")
+    if task.out_of_scope:
+        for item in task.out_of_scope:
+            lines.append(f"- {item}")
+    return "\n".join(lines)
+
+
+def run_ocr_review(
+    task: Task,
+    base_sha: str,
+    head_sha: str,
+    cwd: Path,
+    tool_bin: str | None = None,
+    runner: CommandRunner = run_command,
+) -> dict[str, Any]:
+    binary = tool_bin or "ocr"
+    background_text = build_ocr_background_text(task)
+    args = [
+        binary,
+        "review",
+        "--from", base_sha,
+        "--to", head_sha,
+        "--format", "json",
+        "--audience", "agent",
+        "--repo", str(cwd),
+        "--background", background_text,
+    ]
+
+    debug_command(args, cwd, label="ocr")
+    completed = runner(args, cwd=cwd)
+    if completed.returncode != 0:
+        raise PipelineError(
+            f"OCR review failed with exit code {completed.returncode}.\n"
+            f"Command: {' '.join(args[:-1])} <REDACTED_BACKGROUND>\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+
+    output_text = (completed.stdout or "").strip()
+    payload = parse_json_document(output_text)
+
+    if isinstance(payload, list):
+        raw_findings = payload
+    elif isinstance(payload, dict):
+        raw_findings = payload.get("findings", [])
+    else:
+        raw_findings = []
+
+    if not isinstance(raw_findings, list):
+        raw_findings = []
+
+    normalized_findings = []
+    for f in raw_findings:
+        if not isinstance(f, dict):
+            continue
+        path = f.get("path") or f.get("file") or ""
+        start_line = f.get("start_line") or f.get("line")
+        content = f.get("content") or f.get("message") or ""
+
+        severity = str(f.get("severity") or "").strip()
+        category = str(f.get("category") or "").strip()
+
+        prefix = ""
+        if severity and category:
+            prefix = f"[{severity}][{category}] "
+        elif severity:
+            prefix = f"[{severity}] "
+        elif category:
+            prefix = f"[{category}] "
+
+        message = f"{prefix}{content}"
+
+        try:
+            line_num = int(start_line) if start_line is not None else 0
+        except (ValueError, TypeError):
+            line_num = 0
+
+        normalized_findings.append({
+            "file": str(path),
+            "line": line_num,
+            "message": message,
+        })
+
+    summary = ""
+    if isinstance(payload, dict):
+        summary = payload.get("summary") or ""
+    if not summary:
+        if normalized_findings:
+            summary = "OCR review found issues that need attention."
+        else:
+            summary = "OCR review passed with no findings."
+
+    if normalized_findings:
+        status = "changes_requested"
+        next_steps = "Please fix the findings listed above."
+    else:
+        status = "pass"
+        next_steps = "No action needed."
+
+    return {
+        "status": status,
+        "summary": summary,
+        "findings": normalized_findings,
+        "next_steps": next_steps,
+    }

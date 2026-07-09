@@ -39,6 +39,7 @@ def display_tool_name(tool_name: str | None) -> str:
         "opencode": "OpenCode",
         "copilot": "Copilot",
         "cline": "Cline",
+        "ocr": "OCR",
     }
     return mapping.get(tool_name.lower(), tool_name)
 
@@ -408,6 +409,9 @@ def resolve_tool_for_phase(
         tool_name = getattr(config, "tool", "codex")
 
     tool_name = tool_name.lower()
+
+    if tool_name == "ocr" and phase != "review":
+        raise PipelineError("The 'ocr' tool can only be used during the 'review' phase.")
 
     # 2. Resolve tool binary
     tool_bin = None
