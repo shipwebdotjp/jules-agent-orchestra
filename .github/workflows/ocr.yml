@@ -27,22 +27,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: uv sync --frozen --all-extras
-
       - name: Install OCR CLI
         run: |
           sudo npm install -g @alibaba-group/open-code-review
 
       - name: Run OCR Review
         run: |
-          uv run python -m jules_agent.ocr_workflow
+          python3 .github/scripts/ocr_review.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
