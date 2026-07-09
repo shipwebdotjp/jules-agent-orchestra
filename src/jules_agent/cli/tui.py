@@ -104,6 +104,27 @@ class TextInputModal(ModalScreen[str]):
         self.query_one("#modal_input").focus()
 
 
+class ConfirmModal(ModalScreen[bool]):
+    def __init__(self, title: str, confirm_label: str = "Delete", cancel_label: str = "Cancel"):
+        super().__init__()
+        self.title_text = title
+        self.confirm_label = confirm_label
+        self.cancel_label = cancel_label
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(self.title_text),
+            Horizontal(
+                Button(self.confirm_label, variant="error", id="confirm"),
+                Button(self.cancel_label, variant="primary", id="cancel"),
+            ),
+            id="modal_container",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "confirm")
+
+
 class ClarificationModal(ModalScreen[str]):
     def __init__(self, question: ClarificationQuestion, round_idx: int, total_rounds: int):
         super().__init__()
@@ -667,11 +688,10 @@ class JulesTUI(App):
         if not run or not task:
             return
 
-        def on_confirm(confirm: str):
-            if confirm.strip().lower() in ("y", "yes"):
+        def on_confirm(confirmed: bool):
+            if confirmed:
                 def do_delete():
                     service = DeleteService(self.state, self.cwd)
-                    # Use DeleteOptions for single task deletion
                     options = DeleteOptions(target_run=run, target_task=task, yes=True, output_func=self.notify)
                     result = service.delete_task(options)
                     self.notify(result.message or "Deleted")
@@ -679,7 +699,7 @@ class JulesTUI(App):
 
                 self.run_worker(do_delete, thread=True)
 
-        self.push_screen(TextInputModal(f"Delete task {task.id}? Type 'y' to confirm:"), on_confirm)
+        self.push_screen(ConfirmModal(f"Delete task {task.id}?"), on_confirm)
 
 def start_tui(state: State, client: JulesClient, github_client: GitHubClient | None, cwd: Path, config: Config) -> int:
     app = JulesTUI(state, client, github_client, cwd, config)
