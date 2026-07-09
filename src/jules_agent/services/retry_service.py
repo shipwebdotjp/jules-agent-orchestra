@@ -12,7 +12,11 @@ from ..pipeline import find_source_name
 from ..git import get_git_branch
 from .options import RetryOptions
 from .results import OperationResult
-from .state_utils import get_jules_state_mapping, get_run_sync_status
+from .state_utils import (
+    get_jules_state_mapping,
+    get_run_sync_status,
+    resolve_dispatch_options,
+)
 
 logger = logging.getLogger("jules_agent")
 
@@ -62,16 +66,8 @@ class RetryService:
         try:
             source_name = find_source_name(self.client, self.state.project.repo)
             starting_branch = get_git_branch(self.cwd)
-            automation_mode = (
-                getattr(options.args, "automation_mode", None)
-                or run.automation_mode
-                or getattr(self.config, "automation_mode", None)
-                or "AUTO_CREATE_PR"
-            )
-            require_plan_approval = (
-                run.require_plan_approval
-                if run.require_plan_approval is not None
-                else False
+            automation_mode, require_plan_approval = resolve_dispatch_options(
+                run, self.config, options.args
             )
 
             session = self.client.create_session(

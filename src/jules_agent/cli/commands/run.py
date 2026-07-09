@@ -31,7 +31,13 @@ def run_confirmation_loop(
     output=print,
 ) -> Any:
     """Backward compatible wrapper."""
-    service = RunService(State(project=ProjectState(root=str(cwd), repo="")), JulesClient(api_key=""), cwd, runner=runner)
+    service = RunService(
+        State(project=ProjectState(root=str(cwd), repo="")),
+        JulesClient(api_key=""),
+        cwd,
+        Config(),
+        runner=runner,
+    )
     options = RunOptions(
         task_description=task,
         tool_name=tool_name,
@@ -58,7 +64,13 @@ def run_clarification_loop(
     max_rounds: int = 5,
 ) -> str:
     """Backward compatible wrapper."""
-    service = RunService(State(project=ProjectState(root=str(cwd), repo="")), JulesClient(api_key=""), cwd, runner=runner)
+    service = RunService(
+        State(project=ProjectState(root=str(cwd), repo="")),
+        JulesClient(api_key=""),
+        cwd,
+        Config(),
+        runner=runner,
+    )
     options = RunOptions(
         task_description=task,
         tool_name=tool_name,
@@ -84,7 +96,7 @@ def handle_run(
     auto_plan_approval = args.auto_plan_approval or config.auto_plan_approval
     automation_mode = args.automation_mode or config.automation_mode or "AUTO_CREATE_PR"
 
-    service = RunService(state, client, cwd)
+    service = RunService(state, client, cwd, config)
     options = RunOptions(
         task_description=args.task,
         no_confirm=args.no_confirm,

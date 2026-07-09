@@ -387,7 +387,7 @@ class JulesTUI(App):
                 return
 
             def do_run():
-                service = RunService(self.state, self.client, self.cwd)
+                service = RunService(self.state, self.client, self.cwd, self.config)
 
                 # Callbacks for interactive flow
                 current_q_indices = [0, 0]
