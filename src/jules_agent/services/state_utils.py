@@ -4,7 +4,9 @@ import datetime
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
+from ..config import Config
 from ..client import JulesClient
 from ..github import GitHubClient
 from ..models import (
@@ -312,6 +314,38 @@ def perform_task_sync_logic(
             updated = True
 
     return updated
+
+
+def resolve_dispatch_options(
+    run: Run,
+    config: Config,
+    args: Any = None,
+) -> tuple[str, bool]:
+    """
+    Resolves automation_mode and require_plan_approval for a task dispatch.
+
+    Resolution order for automation_mode:
+    1. CLI args
+    2. Persisted Run value
+    3. Config value
+    4. Default 'AUTO_CREATE_PR'
+
+    Resolution order for require_plan_approval:
+    1. Persisted Run value (if not None)
+    2. Default False
+    """
+    automation_mode = (
+        getattr(args, "automation_mode", None)
+        or run.automation_mode
+        or getattr(config, "automation_mode", None)
+        or "AUTO_CREATE_PR"
+    )
+    require_plan_approval = (
+        run.require_plan_approval
+        if run.require_plan_approval is not None
+        else False
+    )
+    return automation_mode, require_plan_approval
 
 
 def sync_task_state(

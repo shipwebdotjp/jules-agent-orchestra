@@ -28,6 +28,7 @@ from ..cli.state import (
 )
 from .state_utils import (
     get_jules_state_mapping,
+    resolve_dispatch_options,
     update_run_status_after_task_change,
 )
 from ..codex import resolve_tool_for_phase
@@ -367,7 +368,9 @@ class AdvanceService:
     ) -> None:
         source_name = find_source_name(self.client, self.state.project.repo)
         starting_branch = get_git_branch(self.cwd)
-        automation_mode = getattr(args, "automation_mode", None) or getattr(self.config, "automation_mode", None) or "AUTO_CREATE_PR"
+        automation_mode, require_plan_approval = resolve_dispatch_options(
+            run, self.config, args
+        )
 
         if verbose:
             output_func(f"Dispatching next task: {task.id} - {task.title}")
@@ -379,7 +382,7 @@ class AdvanceService:
                 source_name=source_name,
                 starting_branch=starting_branch,
                 title=task.title,
-                require_plan_approval=False,
+                require_plan_approval=require_plan_approval,
                 automation_mode=automation_mode,
             )
             task.jules = JulesSessionInfo(

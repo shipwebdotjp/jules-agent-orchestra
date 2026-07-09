@@ -261,6 +261,8 @@ class Run:
     created_at: str
     updated_at: str
     tasks: list[Task] = field(default_factory=list)
+    automation_mode: str | None = None
+    require_plan_approval: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -271,6 +273,8 @@ class Run:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "tasks": [t.to_dict() for t in self.tasks],
+            "automation_mode": self.automation_mode,
+            "require_plan_approval": self.require_plan_approval,
         }
 
     @classmethod
@@ -283,6 +287,8 @@ class Run:
             created_at=data["created_at"],
             updated_at=data["updated_at"],
             tasks=[Task.from_dict(t) for t in data.get("tasks", [])],
+            automation_mode=data.get("automation_mode"),
+            require_plan_approval=data.get("require_plan_approval"),
         )
 
 

@@ -20,6 +20,7 @@ from ..codex import ClarificationExchange
 from ..git import CommandRunner, get_git_branch, run_command
 from ..persistence import generate_run_id, save_state
 from ..cli.state import get_jules_state_mapping
+from .state_utils import resolve_dispatch_options
 from .options import Options
 from .results import OperationResult
 
@@ -49,11 +50,13 @@ class RunService:
         state: State,
         client: JulesClient,
         cwd: Path,
+        config: Config,
         runner: CommandRunner = None,
     ):
         self.state = state
         self.client = client
         self.cwd = cwd
+        self.config = config
         self.runner = runner or run_command
 
     def execute(self, options: RunOptions) -> OperationResult:
@@ -85,6 +88,8 @@ class RunService:
             status="running",
             created_at=now_iso,
             updated_at=now_iso,
+            automation_mode=options.automation_mode,
+            require_plan_approval=not options.auto_plan_approval,
         )
 
         for i, subtask in enumerate(plan.tasks, start=1):
@@ -114,6 +119,10 @@ class RunService:
         source_name = find_source_name(self.client, self.state.project.repo)
         starting_branch = get_git_branch(self.cwd)
 
+        automation_mode, require_plan_approval = resolve_dispatch_options(
+            run, self.config, options
+        )
+
         for task in tasks_to_dispatch:
             options.output_func(f"Dispatching task: {task.id} - {task.title}")
             task.status = "dispatching"
@@ -124,8 +133,8 @@ class RunService:
                     source_name=source_name,
                     starting_branch=starting_branch,
                     title=task.title,
-                    require_plan_approval=not options.auto_plan_approval,
-                    automation_mode=options.automation_mode,
+                    require_plan_approval=require_plan_approval,
+                    automation_mode=automation_mode,
                 )
                 task.jules = JulesSessionInfo(
                     session_id=session["id"],
