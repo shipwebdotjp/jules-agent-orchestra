@@ -13,7 +13,7 @@ from textual.screen import ModalScreen, Screen
 from textual.binding import Binding
 
 from ..models import State, Run, Task, ExecutionPlan
-from ..spinner import set_status_callback
+from ..spinner import set_status_callback, spinner
 from ..codex import resolve_tool_for_phase, SelectionCancelled, ClarificationQuestion
 from ..persistence import save_state
 from ..client import JulesClient
@@ -433,90 +433,91 @@ class JulesTUI(App):
                 return
 
             def do_run():
-                service = RunService(self.state, self.client, self.cwd, self.config)
+                with spinner("Creating plan..."):
+                    service = RunService(self.state, self.client, self.cwd, self.config)
 
-                # Callbacks for interactive flow
-                current_q_indices = [0, 0]
+                    # Callbacks for interactive flow
+                    current_q_indices = [0, 0]
 
-                def render_clarification_question(question: ClarificationQuestion, idx: int, total: int):
-                    current_q_indices[0] = idx
-                    current_q_indices[1] = total
+                    def render_clarification_question(question: ClarificationQuestion, idx: int, total: int):
+                        current_q_indices[0] = idx
+                        current_q_indices[1] = total
 
-                def prompt_for_clarification_answer(question: ClarificationQuestion) -> str:
-                    event = threading.Event()
-                    answer = "__CANCEL__"
+                    def prompt_for_clarification_answer(question: ClarificationQuestion) -> str:
+                        event = threading.Event()
+                        answer = "__CANCEL__"
 
-                    def on_answer(val: str):
-                        nonlocal answer
-                        answer = val
-                        event.set()
+                        def on_answer(val: str):
+                            nonlocal answer
+                            answer = val
+                            event.set()
 
-                    self.call_from_thread(
-                        self.push_screen,
-                        ClarificationModal(question, current_q_indices[0], current_q_indices[1]),
-                        on_answer
+                        self.call_from_thread(
+                            self.push_screen,
+                            ClarificationModal(question, current_q_indices[0], current_q_indices[1]),
+                            on_answer
+                        )
+                        event.wait()
+                        if answer == "__CANCEL__":
+                            raise SelectionCancelled()
+                        return answer
+
+                    def render_plan(plan: ExecutionPlan):
+                        # Handled by prompt_for_review_func
+                        pass
+
+                    def prompt_for_review() -> Optional[str]:
+                        # RunService calls decompose_task then this.
+                        # It needs to get ExecutionPlan. Unfortunately RunService doesn't pass it to this callback.
+                        # Wait, RunService.run_confirmation_loop_logic calls render_plan(plan) THEN prompt_for_review().
+                        # So we need to capture the plan in render_plan.
+
+                        event = threading.Event()
+                        feedback = "__CANCEL__"
+
+                        def on_review(val: Optional[str]):
+                            nonlocal feedback
+                            feedback = val
+                            event.set()
+
+                        # We need the plan here. Let's modify do_run to capture it.
+                        self.call_from_thread(self.push_screen, PlanReviewModal(current_plan[0]), on_review)
+                        event.wait()
+                        if feedback == "__CANCEL__":
+                            raise SelectionCancelled()
+                        return feedback
+
+                    current_plan = [None]
+                    def capture_plan(plan: ExecutionPlan):
+                        current_plan[0] = plan
+
+                    tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", self.config)
+                    automation_mode = self.config.automation_mode or "AUTO_CREATE_PR"
+
+                    options = RunOptions(
+                        task_description=description,
+                        no_confirm=False,
+                        auto_plan_approval=self.config.auto_plan_approval,
+                        automation_mode=automation_mode,
+                        tool_name=tool_name,
+                        tool_bin=tool_bin,
+                        gemini_skip_trust=gemini_skip_trust,
+                        output_func=self._log_and_notify,
+                        render_clarification_question_func=render_clarification_question,
+                        prompt_for_clarification_answer_func=prompt_for_clarification_answer,
+                        render_plan_func=capture_plan,
+                        prompt_for_review_func=prompt_for_review,
                     )
-                    event.wait()
-                    if answer == "__CANCEL__":
-                        raise SelectionCancelled()
-                    return answer
 
-                def render_plan(plan: ExecutionPlan):
-                    # Handled by prompt_for_review_func
-                    pass
+                    try:
+                        service.execute(options)
+                        self.notify("Plan created and dispatched")
+                    except SelectionCancelled:
+                        self.notify("Plan creation cancelled")
+                    except Exception as e:
+                        self.notify(f"Error creating plan: {e}", variant="error")
 
-                def prompt_for_review() -> Optional[str]:
-                    # RunService calls decompose_task then this.
-                    # It needs to get ExecutionPlan. Unfortunately RunService doesn't pass it to this callback.
-                    # Wait, RunService.run_confirmation_loop_logic calls render_plan(plan) THEN prompt_for_review().
-                    # So we need to capture the plan in render_plan.
-
-                    event = threading.Event()
-                    feedback = "__CANCEL__"
-
-                    def on_review(val: Optional[str]):
-                        nonlocal feedback
-                        feedback = val
-                        event.set()
-
-                    # We need the plan here. Let's modify do_run to capture it.
-                    self.call_from_thread(self.push_screen, PlanReviewModal(current_plan[0]), on_review)
-                    event.wait()
-                    if feedback == "__CANCEL__":
-                        raise SelectionCancelled()
-                    return feedback
-
-                current_plan = [None]
-                def capture_plan(plan: ExecutionPlan):
-                    current_plan[0] = plan
-
-                tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", self.config)
-                automation_mode = self.config.automation_mode or "AUTO_CREATE_PR"
-
-                options = RunOptions(
-                    task_description=description,
-                    no_confirm=False,
-                    auto_plan_approval=self.config.auto_plan_approval,
-                    automation_mode=automation_mode,
-                    tool_name=tool_name,
-                    tool_bin=tool_bin,
-                    gemini_skip_trust=gemini_skip_trust,
-                    output_func=self._log_and_notify,
-                    render_clarification_question_func=render_clarification_question,
-                    prompt_for_clarification_answer_func=prompt_for_clarification_answer,
-                    render_plan_func=capture_plan,
-                    prompt_for_review_func=prompt_for_review,
-                )
-
-                try:
-                    service.execute(options)
-                    self.notify("Plan created and dispatched")
-                except SelectionCancelled:
-                    self.notify("Plan creation cancelled")
-                except Exception as e:
-                    self.notify(f"Error creating plan: {e}", variant="error")
-
-                self.call_from_thread(self.refresh_list)
+                    self.call_from_thread(self.refresh_list)
 
             self.run_worker(do_run, thread=True)
 
@@ -524,11 +525,12 @@ class JulesTUI(App):
 
     def action_sync(self) -> None:
         def do_sync():
-            service = SyncService(self.state, self.client, self.github_client, self.cwd)
-            options = SyncOptions(output_func=self._log_and_notify)
-            service.execute(options)
-            self.call_from_thread(self.refresh_list)
-            self.notify("Synced with Jules/GitHub")
+            with spinner("Syncing..."):
+                service = SyncService(self.state, self.client, self.github_client, self.cwd)
+                options = SyncOptions(output_func=self._log_and_notify)
+                service.execute(options)
+                self.call_from_thread(self.refresh_list)
+                self.notify("Synced with Jules/GitHub")
 
         self.run_worker(do_sync, thread=True)
 
@@ -538,11 +540,12 @@ class JulesTUI(App):
             return
 
         def do_approve():
-            service = ApproveService(self.state, self.client, self.cwd)
-            options = ApproveOptions(run=run, task=task, task_id_for_print=f"{run.id}:{task.id}")
-            result = service.execute(options)
-            self.notify(result.message or "Action completed")
-            self.call_from_thread(self.refresh_list)
+            with spinner("Approving..."):
+                service = ApproveService(self.state, self.client, self.cwd)
+                options = ApproveOptions(run=run, task=task, task_id_for_print=f"{run.id}:{task.id}")
+                result = service.execute(options)
+                self.notify(result.message or "Action completed")
+                self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_approve, thread=True)
 
@@ -558,21 +561,22 @@ class JulesTUI(App):
         def get_feedback(feedback: str):
             if feedback:
                 def do_feedback():
-                    # We use SendService to handle the direct message part of feedback
-                    # because FeedbackService is designed for the interactive CLI loop.
-                    service = SendService(self.state, self.client, self.cwd)
-                    options = SendOptions(
-                        run=run,
-                        task=task,
-                        message=feedback,
-                        task_id_for_print=f"{run.id}:{task.id}"
-                    )
-                    result = service.execute(options)
-                    if result.success:
-                        self.notify("Feedback sent")
-                    else:
-                        self.notify(result.message or "Failed to send feedback", severity="error")
-                    self.call_from_thread(self.refresh_list)
+                    with spinner("Sending feedback..."):
+                        # We use SendService to handle the direct message part of feedback
+                        # because FeedbackService is designed for the interactive CLI loop.
+                        service = SendService(self.state, self.client, self.cwd)
+                        options = SendOptions(
+                            run=run,
+                            task=task,
+                            message=feedback,
+                            task_id_for_print=f"{run.id}:{task.id}"
+                        )
+                        result = service.execute(options)
+                        if result.success:
+                            self.notify("Feedback sent")
+                        else:
+                            self.notify(result.message or "Failed to send feedback", severity="error")
+                        self.call_from_thread(self.refresh_list)
 
                 self.run_worker(do_feedback, thread=True)
 
@@ -586,19 +590,20 @@ class JulesTUI(App):
         def send_msg(msg: str):
             if msg:
                 def do_send():
-                    service = SendService(self.state, self.client, self.cwd)
-                    options = SendOptions(
-                        run=run,
-                        task=task,
-                        message=msg,
-                        task_id_for_print=f"{run.id}:{task.id}"
-                    )
-                    result = service.execute(options)
-                    if result.success:
-                        self.notify("Message sent")
-                    else:
-                        self.notify(result.message or "Failed to send message", severity="error")
-                    self.call_from_thread(self.refresh_list)
+                    with spinner("Sending message..."):
+                        service = SendService(self.state, self.client, self.cwd)
+                        options = SendOptions(
+                            run=run,
+                            task=task,
+                            message=msg,
+                            task_id_for_print=f"{run.id}:{task.id}"
+                        )
+                        result = service.execute(options)
+                        if result.success:
+                            self.notify("Message sent")
+                        else:
+                            self.notify(result.message or "Failed to send message", severity="error")
+                        self.call_from_thread(self.refresh_list)
 
                 self.run_worker(do_send, thread=True)
 
@@ -610,14 +615,15 @@ class JulesTUI(App):
             return
 
         def do_review():
-            service = ReviewService(self.state, self.client, self.github_client, self.cwd)
-            options = ReviewOptions(task=task)
-            result = service.execute(options)
-            if result.success:
-                self.notify("Review completed")
-            else:
-                self.notify(result.message or "Review failed", severity="error")
-            self.call_from_thread(self.refresh_list)
+            with spinner("Reviewing..."):
+                service = ReviewService(self.state, self.client, self.github_client, self.cwd)
+                options = ReviewOptions(task=task)
+                result = service.execute(options)
+                if result.success:
+                    self.notify("Review completed")
+                else:
+                    self.notify(result.message or "Review failed", severity="error")
+                self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_review, thread=True)
 
@@ -627,14 +633,15 @@ class JulesTUI(App):
             return
 
         def do_review_pass():
-            service = ReviewPassService(self.state, self.client, self.github_client, self.cwd)
-            options = ReviewPassOptions(task=task)
-            result = service.execute(options)
-            if result.success:
-                self.notify("Review-pass completed")
-            else:
-                self.notify(result.message or "Review-pass failed", severity="error")
-            self.call_from_thread(self.refresh_list)
+            with spinner("Marking review as passed..."):
+                service = ReviewPassService(self.state, self.client, self.github_client, self.cwd)
+                options = ReviewPassOptions(task=task)
+                result = service.execute(options)
+                if result.success:
+                    self.notify("Review-pass completed")
+                else:
+                    self.notify(result.message or "Review-pass failed", severity="error")
+                self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_review_pass, thread=True)
 
@@ -644,21 +651,22 @@ class JulesTUI(App):
             return
 
         def do_merge():
-            service = MergeService(self.state, self.client, self.github_client, self.cwd, self.config)
-            options = MergeOptions(
-                run=run,
-                task=task,
-                task_id_for_print=f"{run.id}:{task.id}",
-                delete_branch=self.config.merge_delete_branch,
-                pull=self.config.merge_pull,
-                merge_method=self.config.merge_method,
-            )
-            result = service.execute(options)
-            if result.success:
-                self.notify("Merge completed")
-            else:
-                self.notify(result.message or "Merge failed", severity="error")
-            self.call_from_thread(self.refresh_list)
+            with spinner("Merging..."):
+                service = MergeService(self.state, self.client, self.github_client, self.cwd, self.config)
+                options = MergeOptions(
+                    run=run,
+                    task=task,
+                    task_id_for_print=f"{run.id}:{task.id}",
+                    delete_branch=self.config.merge_delete_branch,
+                    pull=self.config.merge_pull,
+                    merge_method=self.config.merge_method,
+                )
+                result = service.execute(options)
+                if result.success:
+                    self.notify("Merge completed")
+                else:
+                    self.notify(result.message or "Merge failed", severity="error")
+                self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_merge, thread=True)
 
@@ -676,17 +684,18 @@ class JulesTUI(App):
         task_to_dispatch = planned_tasks[0]
 
         def do_next():
-            service = NextService(self.state, self.client, self.cwd, self.config)
-            # automation_mode is passed via args in NextOptions
-            from argparse import Namespace
-            args = Namespace(automation_mode=self.config.automation_mode)
-            options = NextOptions(run=run, task=task_to_dispatch, args=args)
-            result = service.execute(options)
-            if result.success:
-                self.notify(f"Dispatched {task_to_dispatch.id}")
-            else:
-                self.notify(result.message or "Next dispatch failed", severity="error")
-            self.call_from_thread(self.refresh_list)
+            with spinner("Dispatching..."):
+                service = NextService(self.state, self.client, self.cwd, self.config)
+                # automation_mode is passed via args in NextOptions
+                from argparse import Namespace
+                args = Namespace(automation_mode=self.config.automation_mode)
+                options = NextOptions(run=run, task=task_to_dispatch, args=args)
+                result = service.execute(options)
+                if result.success:
+                    self.notify(f"Dispatched {task_to_dispatch.id}")
+                else:
+                    self.notify(result.message or "Next dispatch failed", severity="error")
+                self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_next, thread=True)
 
@@ -696,15 +705,16 @@ class JulesTUI(App):
             return
 
         def do_retry():
-            service = RetryService(self.state, self.client, self.cwd, self.config)
-            # RetryOptions accepts output_func
-            options = RetryOptions(run=run, task=task, output_func=self._log_and_notify)
-            result = service.execute(options)
-            if result.success:
-                self.notify("Retry initiated")
-            else:
-                self.notify(result.message or "Retry failed", severity="error")
-            self.call_from_thread(self.refresh_list)
+            with spinner("Retrying..."):
+                service = RetryService(self.state, self.client, self.cwd, self.config)
+                # RetryOptions accepts output_func
+                options = RetryOptions(run=run, task=task, output_func=self._log_and_notify)
+                result = service.execute(options)
+                if result.success:
+                    self.notify("Retry initiated")
+                else:
+                    self.notify(result.message or "Retry failed", severity="error")
+                self.call_from_thread(self.refresh_list)
 
         self.run_worker(do_retry, thread=True)
 
