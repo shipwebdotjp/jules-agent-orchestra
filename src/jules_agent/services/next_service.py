@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Optional
 
 from ..client import JulesClient
 from ..config import Config
@@ -14,7 +14,8 @@ from .results import OperationResult
 class NextOptions(Options):
     run: Run
     task: Task
-    args: Any = None
+    automation_mode: Optional[str] = None
+    output_func: Callable[[str], None] = print
 
 class NextService:
     def __init__(self, state: State, client: JulesClient, cwd: Path, config: Config):
@@ -30,7 +31,8 @@ class NextService:
             service.dispatch_task_logic(
                 task=options.task,
                 run=options.run,
-                args=options.args,
+                automation_mode=options.automation_mode,
+                output_func=options.output_func,
             )
             return OperationResult(exit_code=0)
         except Exception as e:

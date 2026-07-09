@@ -36,7 +36,7 @@ def handle_retry(
     options = RetryOptions(
         run=run,
         task=task,
-        args=args,
+        automation_mode=getattr(args, "automation_mode", None),
     )
     result = service.execute(options)
 

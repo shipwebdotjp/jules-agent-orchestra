@@ -17,6 +17,7 @@ class SendOptions(Options):
     task: Task
     message: str
     task_id_for_print: str
+    output_func: Callable[[str], None] = print
 
 class SendService:
     def __init__(self, state: State, client: JulesClient, cwd: Path):
@@ -27,6 +28,7 @@ class SendService:
     def execute(self, options: SendOptions) -> OperationResult:
         task = options.task
         task_id_for_print = options.task_id_for_print
+        output = options.output_func
 
         if not task.jules:
             return OperationResult(
@@ -45,5 +47,6 @@ class SendService:
             .replace("+00:00", "Z")
         )
         save_state(self.cwd, self.state)
+        output("Message sent to Jules.")
 
         return OperationResult(exit_code=0, message="Done.")

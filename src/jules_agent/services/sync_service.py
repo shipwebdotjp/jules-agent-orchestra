@@ -37,9 +37,8 @@ class SyncService:
             for run in self.state.runs
             for task in run.tasks
         ):
-            print(
-                "Warning: GITHUB_TOKEN is not set; skipping PR status checks.",
-                file=sys.stderr,
+            options.error_func(
+                "Warning: GITHUB_TOKEN is not set; skipping PR status checks."
             )
 
         for run in self.state.runs:
