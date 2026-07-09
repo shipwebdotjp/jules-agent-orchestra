@@ -65,6 +65,8 @@ jules-agent [flags] <command> [args]
 ```
 
 引数なしで `jules-agent` を起動すると（かつ対話可能なターミナルの場合）、全画面の TUI ダッシュボードが開き、run や task の一覧確認と操作が行えます。
+TUI の下半分にはログペインがあり、リアルタイムの動作状況や HTTP リクエストログ（`--debug` 時）を確認できます。
+
 TUI で利用可能なキーボードショートカット:
 - `s`: Jules および GitHub と同期 (Sync)
 - `a`: 計画の承認 (Approve)

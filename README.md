@@ -65,6 +65,8 @@ jules-agent [flags] <command> [args]
 ```
 
 If you run `jules-agent` without a command in an interactive terminal, it opens a full-screen TUI dashboard where you can view and manage your runs and tasks.
+The TUI includes a log pane at the bottom to monitor real-time activities and HTTP request logs (visible when `--debug` is used).
+
 Supported keyboard shortcuts in the TUI:
 - `s`: Sync with Jules and GitHub
 - `a`: Approve plans

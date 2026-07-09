@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import threading
 from pathlib import Path
 from typing import Any, List, Optional
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, ListView, ListItem, Static, Label, Input, Button, RadioSet, RadioButton
+from textual.widgets import Header, Footer, ListView, ListItem, Static, Label, Input, Button, RadioSet, RadioButton, RichLog
 from textual.containers import Horizontal, Vertical, Container, ScrollableContainer
 from textual.screen import ModalScreen, Screen
 from textual.binding import Binding
@@ -29,6 +30,17 @@ from ..services.next_service import NextService, NextOptions
 from ..services.retry_service import RetryService, RetryOptions
 from ..services.delete_service import DeleteService, DeleteOptions
 from ..services.run_service import RunService, RunOptions
+
+
+class TUILogHandler(logging.Handler):
+    def __init__(self, log_widget: RichLog, app: App):
+        super().__init__()
+        self.log_widget = log_widget
+        self.app = app
+
+    def emit(self, record: logging.LogRecord):
+        message = self.format(record)
+        self.app.call_from_thread(self.log_widget.write, message)
 
 
 class TaskItem(ListItem):
@@ -175,6 +187,14 @@ class PlanReviewModal(ModalScreen[Optional[str]]):
 
 class JulesTUI(App):
     CSS = """
+    #outer_container {
+        height: 1fr;
+    }
+
+    #main_container {
+        height: 60%;
+    }
+
     #task_list {
         width: 40%;
         border-right: tall $primary;
@@ -183,6 +203,12 @@ class JulesTUI(App):
     #right_pane {
         width: 60%;
         padding: 1;
+    }
+
+    #log_pane {
+        height: 40%;
+        border-top: tall $primary;
+        background: $surface;
     }
 
     #modal_container {
@@ -243,13 +269,29 @@ class JulesTUI(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Horizontal(id="main_container"):
-            yield ListView(id="task_list")
-            yield DetailPane(id="right_pane")
+        with Vertical(id="outer_container"):
+            with Horizontal(id="main_container"):
+                yield ListView(id="task_list")
+                yield DetailPane(id="right_pane")
+            yield RichLog(id="log_pane", highlight=True, markup=True)
         yield Footer()
 
     def on_mount(self) -> None:
+        # Set up logging to the log pane
+        log_pane = self.query_one("#log_pane", RichLog)
+        handler = TUILogHandler(log_pane, self)
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"))
+
+        root_logger = logging.getLogger("jules_agent")
+        root_logger.addHandler(handler)
+        self._log_handler = handler
+
         self.refresh_list()
+
+    def on_unmount(self) -> None:
+        if hasattr(self, "_log_handler"):
+            root_logger = logging.getLogger("jules_agent")
+            root_logger.removeHandler(self._log_handler)
 
     def refresh_list(self) -> None:
         list_view = self.query_one("#task_list", ListView)

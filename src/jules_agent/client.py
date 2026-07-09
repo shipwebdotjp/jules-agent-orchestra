@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Iterable
 
 import httpx
+
+logger = logging.getLogger("jules_agent")
 
 
 class JulesAPIError(RuntimeError):
@@ -32,8 +35,10 @@ class JulesClient:
         params: dict[str, Any] = {}
 
         while True:
+            logger.debug(f"Jules API request: GET {url}")
             with httpx.Client() as client:
                 response = client.get(url, headers=self.headers, params=params)
+            logger.debug(f"Jules API response: {response.status_code}")
 
             if response.status_code != 200:
                 raise JulesAPIError(
@@ -76,8 +81,10 @@ class JulesClient:
         if require_plan_approval:
             payload["requirePlanApproval"] = True
 
+        logger.debug(f"Jules API request: POST {url}")
         with httpx.Client() as client:
             response = client.post(url, headers=self.headers, json=payload)
+        logger.debug(f"Jules API response: {response.status_code}")
 
         if response.status_code != 200:
             raise JulesAPIError(
@@ -93,8 +100,10 @@ class JulesClient:
         params: dict[str, Any] = {}
 
         while True:
+            logger.debug(f"Jules API request: GET {url}")
             with httpx.Client() as client:
                 response = client.get(url, headers=self.headers, params=params)
+            logger.debug(f"Jules API response: {response.status_code}")
 
             if response.status_code != 200:
                 raise JulesAPIError(
@@ -114,8 +123,10 @@ class JulesClient:
 
     def get_session(self, session_name: str) -> dict[str, Any]:
         url = f"{self.base_url}/{session_name}"
+        logger.debug(f"Jules API request: GET {url}")
         with httpx.Client() as client:
             response = client.get(url, headers=self.headers)
+        logger.debug(f"Jules API response: {response.status_code}")
 
         if response.status_code != 200:
             raise JulesAPIError(
@@ -128,8 +139,10 @@ class JulesClient:
 
     def approve_plan(self, session_name: str) -> dict[str, Any]:
         url = f"{self.base_url}/{session_name}:approvePlan"
+        logger.debug(f"Jules API request: POST {url}")
         with httpx.Client() as client:
             response = client.post(url, headers=self.headers)
+        logger.debug(f"Jules API response: {response.status_code}")
 
         if response.status_code != 200:
             raise JulesAPIError(
@@ -143,8 +156,10 @@ class JulesClient:
     def send_message(self, session_name: str, message: str) -> dict[str, Any]:
         url = f"{self.base_url}/{session_name}:sendMessage"
         payload = {"prompt": message}
+        logger.debug(f"Jules API request: POST {url}")
         with httpx.Client() as client:
             response = client.post(url, headers=self.headers, json=payload)
+        logger.debug(f"Jules API response: {response.status_code}")
 
         if response.status_code != 200:
             raise JulesAPIError(
