@@ -1,0 +1,53 @@
+name: OCR Review
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  ocr-review:
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@ocr')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch PR refs
+        run: |
+          gh pr checkout ${{ github.event.issue.number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Install OCR CLI
+        run: |
+          sudo npm install -g @alibaba-group/open-code-review
+
+      - name: Run OCR Review
+        run: |
+          uv run python -m jules_agent.ocr_workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
+          OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_TOKEN }}
+          OCR_LLM_MODEL: ${{ secrets.OCR_LLM_MODEL }}
+          OCR_USE_ANTHROPIC: ${{ secrets.OCR_USE_ANTHROPIC }}
