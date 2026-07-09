@@ -220,7 +220,7 @@ class JulesTUI(App):
     }
 
     #log_pane {
-        height: 40%;
+        height: 1fr;
         border-top: tall $primary;
         background: $surface;
     }
@@ -292,6 +292,7 @@ class JulesTUI(App):
         self.cwd = cwd
         self.config = config
         self.show_all = False
+        self._spinner_msg = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -328,7 +329,25 @@ class JulesTUI(App):
                 jules_logger.propagate = self._old_propagate
 
     def _update_status(self, msg: str) -> None:
-        self.query_one("#status_bar", Static).update(msg)
+        self._spinner_msg = msg
+        self._render_status_bar()
+
+    def _render_status_bar(self) -> None:
+        total = 0
+        running = 0
+        completed = 0
+        for run in self.state.runs:
+            for task in run.tasks:
+                total += 1
+                if task.status in ("dispatching", "dispatched", "planning", "awaiting_plan_approval", "plan_approved", "in_progress", "awaiting_user_feedback", "paused", "reviewing", "review_passed", "needs_fix", "waiting_human_review", "blocked"):
+                    running += 1
+                elif task.status in ("completed", "pr_created", "merged", "pr_closed"):
+                    completed += 1
+        parts = []
+        if self._spinner_msg:
+            parts.append(self._spinner_msg)
+        parts.append(f"Tasks: {total} total, {running} running, {completed} completed")
+        self.query_one("#status_bar", Static).update(" | ".join(parts))
 
     def refresh_list(self) -> None:
         list_view = self.query_one("#task_list", ListView)
@@ -362,6 +381,7 @@ class JulesTUI(App):
 
         self.update_detail()
         self.update_title()
+        self._render_status_bar()
 
     def update_title(self) -> None:
         mode = "All" if self.show_all else "In-progress"
