@@ -375,8 +375,12 @@ def main(argv: list[str] | None = None) -> int:
     cwd = Path.cwd()
 
     if args.command is None:
-        parser.print_help()
-        return 0
+        if not sys.stdin.isatty():
+            parser.print_help()
+            return 0
+
+        # TUI requires state, repo, and API key checks.
+        # These are handled below by existing logic before TUI starts.
 
     try:
         state = load_state(cwd)
@@ -392,6 +396,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
 
             state = State(project=ProjectState(root=str(git_root), repo=repo))
+
+        if args.command is None:
+            from .tui import start_tui
+            return start_tui(state, client, github_client, cwd, config)
 
         if args.command == "run":
             return handle_run(args, state, client, cwd, config)
