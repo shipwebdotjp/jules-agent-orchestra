@@ -15,7 +15,7 @@ from textual.binding import Binding
 
 from ..models import State, Run, Task, ExecutionPlan
 from ..spinner import set_status_callback, spinner
-from ..codex import resolve_tool_for_phase, SelectionCancelled, ClarificationQuestion
+from ..codex import resolve_tool_for_phase, SelectionCancelled, ClarificationQuestion, display_tool_name
 from ..persistence import save_state
 from ..client import JulesClient
 from ..github import GitHubClient
@@ -398,6 +398,13 @@ class JulesTUI(App):
             review_tool=None,
         )
 
+    def _merged_args(self) -> argparse.Namespace:
+        base = argparse.Namespace(**vars(self.args)) if self.args else argparse.Namespace()
+        for k, v in vars(self.overrides).items():
+            if v is not None:
+                setattr(base, k, v)
+        return base
+
     def _log_and_notify(self, msg: str) -> None:
         self._jules_logger.info(msg)
         self.notify(msg)
@@ -544,7 +551,10 @@ class JulesTUI(App):
                 return
 
             def do_run():
-                with spinner("Creating plan..."):
+                tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", self.config, self._merged_args())
+                tool_label = display_tool_name(tool_name)
+
+                with spinner(f"Creating plan via {tool_label}..."):
                     service = RunService(self.state, self.client, self.cwd, self.config)
 
                     # Callbacks for interactive flow
@@ -602,7 +612,6 @@ class JulesTUI(App):
                     def capture_plan(plan: ExecutionPlan):
                         current_plan[0] = plan
 
-                    tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", self.config, self.overrides)
                     automation_mode = self.config.automation_mode or "AUTO_CREATE_PR"
 
                     options = RunOptions(
@@ -726,8 +735,10 @@ class JulesTUI(App):
             return
 
         def do_review():
-            with spinner("Reviewing..."):
-                tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("review", self.config, self.overrides)
+            tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("review", self.config, self._merged_args())
+            tool_label = display_tool_name(tool_name)
+
+            with spinner(f"Reviewing via {tool_label}..."):
                 service = ReviewService(self.state, self.client, self.github_client, self.cwd)
                 options = ReviewOptions(
                     task=task,

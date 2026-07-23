@@ -60,7 +60,7 @@ def test_exec_raises_pipeline_error_on_failure():
     with pytest.raises(PipelineError) as excinfo:
         adapter.exec(prompt, schema, cwd, mock_runner)
 
-    assert "opencode run call failed" in str(excinfo.value)
+    assert "OpenCode run call failed" in str(excinfo.value)
     assert "opencode run --format default <REDACTED_PROMPT>" in str(excinfo.value)
     assert "<REDACTED_PROMPT>" in str(excinfo.value)
     assert "Detailed error info" in str(excinfo.value)

@@ -60,7 +60,7 @@ def test_exec_raises_pipeline_error_on_failure():
     with pytest.raises(PipelineError) as excinfo:
         adapter.exec(prompt, schema, cwd, mock_runner)
 
-    assert "claude call failed" in str(excinfo.value)
+    assert "Claude call failed" in str(excinfo.value)
     assert "<REDACTED_PROMPT>" in str(excinfo.value)
     assert "Detailed error info" in str(excinfo.value)
     # Ensure the actual prompt is NOT in the error message

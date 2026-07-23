@@ -64,5 +64,5 @@ def test_tui_smoke(mock_jules_tui_class):
 
     start_tui(state, client, github_client, cwd, config)
 
-    mock_jules_tui_class.assert_called_once_with(state, client, github_client, cwd, config)
+    mock_jules_tui_class.assert_called_once_with(state, client, github_client, cwd, config, None)
     mock_app.run.assert_called_once()

@@ -107,7 +107,7 @@ class CodexAdapter(BackendAdapter):
             if completed.returncode != 0:
                 sanitized_args = list(args[:-1]) + ["<REDACTED_PROMPT>"]
                 raise PipelineError(
-                    "Codex call failed.\n"
+                    f"{display_tool_name(self.binary)} call failed.\n"
                     f"Command: {' '.join(sanitized_args)}\n"
                     f"stdout:\n{completed.stdout}\n"
                     f"stderr:\n{completed.stderr}"
@@ -138,7 +138,7 @@ class GenericBackendAdapter(BackendAdapter):
         if completed.returncode != 0:
             sanitized_args = [self.binary, "<REDACTED_PROMPT>"]
             raise PipelineError(
-                f"{self.binary} call failed.\n"
+                f"{display_tool_name(self.binary)} call failed.\n"
                 f"Command: {' '.join(sanitized_args)}\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
@@ -179,7 +179,7 @@ class ClaudeAdapter(GenericBackendAdapter):
                 "<REDACTED_PROMPT>",
             ]
             raise PipelineError(
-                f"{self.binary} call failed.\n"
+                f"{display_tool_name(self.binary)} call failed.\n"
                 f"Command: {' '.join(sanitized_args)}\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
@@ -217,7 +217,7 @@ class GeminiAdapter(GenericBackendAdapter):
                 sanitized_args.append("--skip-trust")
             sanitized_args.append("<REDACTED_PROMPT>")
             raise PipelineError(
-                f"{self.binary} call failed.\n"
+                f"{display_tool_name(self.binary)} call failed.\n"
                 f"Command: {' '.join(sanitized_args)}\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
@@ -243,7 +243,7 @@ class OpenCodeAdapter(GenericBackendAdapter):
         if completed.returncode != 0:
             sanitized_args = [self.binary, "run", "--format", "default", "<REDACTED_PROMPT>"]
             raise PipelineError(
-                f"{self.binary} run call failed.\n"
+                f"{display_tool_name(self.binary)} run call failed.\n"
                 f"Command: {' '.join(sanitized_args)}\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
@@ -271,7 +271,7 @@ class CopilotAdapter(GenericBackendAdapter):
         if completed.returncode != 0:
             sanitized_args = [self.binary, "-p", "<REDACTED_PROMPT>", "-s", "--no-ask-user"]
             raise PipelineError(
-                f"{self.binary} call failed.\n"
+                f"{display_tool_name(self.binary)} call failed.\n"
                 f"Command: {' '.join(sanitized_args)}\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
@@ -301,7 +301,7 @@ class ClineAdapter(GenericBackendAdapter):
             sanitized_args = [self.binary]
             sanitized_args.append("<REDACTED_PROMPT>")
             raise PipelineError(
-                f"{self.binary} call failed.\n"
+                f"{display_tool_name(self.binary)} call failed.\n"
                 f"Command: {' '.join(sanitized_args)}\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
