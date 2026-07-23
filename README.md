@@ -78,8 +78,11 @@ Supported keyboard shortcuts in the TUI:
 - `t`: Retry failed task
 - `d`: Delete task
 - `e`: Send manual message
+- `,`: Open session settings
 - `r`: Refresh list
 - `q`: Quit
+
+The TUI includes a session settings modal that can be opened with `,`. This allows you to temporarily override the `tool`, `tool-bin`, `plan-tool`, `approve-tool`, `feedback-tool`, and `review-tool` settings for the current TUI session. These settings are not persisted to the configuration file. You can close the modal with `Escape`.
 
 The common flow is:
 

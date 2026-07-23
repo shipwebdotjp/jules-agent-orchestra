@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import datetime
 import logging
 import threading
@@ -199,6 +200,89 @@ class PlanReviewModal(ModalScreen[Optional[str]]):
         self.query_one("#feedback_input").focus()
 
 
+class SettingsModal(ModalScreen[argparse.Namespace | None]):
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    TOOL_OPTIONS = ["codex", "claude", "gemini", "opencode", "copilot", "cline"]
+    REVIEW_OPTIONS = TOOL_OPTIONS + ["ocr"]
+    PHASES: list[tuple[str, str, list[str]]] = [
+        ("tool", "Default Tool", TOOL_OPTIONS),
+        ("plan_tool", "Plan Tool", TOOL_OPTIONS),
+        ("approve_tool", "Approve Tool", TOOL_OPTIONS),
+        ("feedback_tool", "Feedback Tool", TOOL_OPTIONS),
+        ("review_tool", "Review Tool", REVIEW_OPTIONS),
+    ]
+
+    def __init__(self, overrides: argparse.Namespace, base_config: Config, args: argparse.Namespace):
+        super().__init__()
+        self.overrides = overrides
+        self.base_config = base_config
+        self.args = args
+
+    def _get_config_tool(self, attr: str) -> str:
+        if attr == "tool":
+            return self.base_config.tool
+        phase_default = getattr(self.base_config, attr, None)
+        if phase_default:
+            return phase_default
+        return self.base_config.tool
+
+    def _get_effective_tool(self, attr: str) -> str:
+        override = getattr(self.overrides, attr, None)
+        if override:
+            return override
+        
+        # Check args (CLI flags)
+        args_val = getattr(self.args, attr, None) if self.args else None
+        if args_val:
+            return args_val
+
+        return self._get_config_tool(attr)
+
+    def compose(self) -> ComposeResult:
+        controls: list[Any] = [Label("Session Settings")]
+        for attr, label, options in self.PHASES:
+            current = getattr(self.overrides, attr, None)
+            effective = self._get_effective_tool(attr)
+            
+            buttons: list[RadioButton] = [RadioButton(f"(current: {effective})", value=(current is None))]
+            for opt in options:
+                buttons.append(RadioButton(opt, value=(current == opt)))
+            controls.append(Label(f"{label}:"))
+            controls.append(RadioSet(*buttons, id=attr))
+
+        current_bin = getattr(self.overrides, "tool_bin", None) or ""
+        controls.append(Label("Tool Binary:"))
+        controls.append(TextArea(current_bin, id="tool_bin", tab_behavior="focus"))
+
+        yield ScrollableContainer(*controls, id="settings_scroll")
+        yield Horizontal(
+            Button("Submit", variant="primary", id="submit"),
+            Button("Cancel", variant="error", id="cancel"),
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "submit":
+            for attr, _label, _options in self.PHASES:
+                rs = self.query_one(f"#{attr}", RadioSet)
+                selected = rs.pressed_button
+                effective = self._get_effective_tool(attr)
+                if selected is None or str(selected.label) == f"(current: {effective})":
+                    setattr(self.overrides, attr, None)
+                else:
+                    setattr(self.overrides, attr, str(selected.label))
+
+            tool_bin = self.query_one("#tool_bin", TextArea).text.strip()
+            self.overrides.tool_bin = tool_bin if tool_bin else None
+
+            self.dismiss(self.overrides)
+        else:
+            self.dismiss(None)
+
+
 class JulesTUI(App):
     CSS = """
     #outer_container {
@@ -255,6 +339,15 @@ class JulesTUI(App):
         border: solid $accent;
     }
 
+    #tool_bin {
+        height: 3;
+        border: solid $accent;
+    }
+
+    #settings_scroll {
+        height: 1fr;
+    }
+
     ListItem {
         padding: 1;
     }
@@ -282,18 +375,28 @@ class JulesTUI(App):
         Binding("t", "retry", "Retry"),
         Binding("d", "delete", "Delete"),
         Binding("e", "send_msg", "Send Message"),
+        Binding("comma", "settings", "Settings"),
     ]
 
-    def __init__(self, state: State, client: JulesClient, github_client: GitHubClient | None, cwd: Path, config: Config):
+    def __init__(self, state: State, client: JulesClient, github_client: GitHubClient | None, cwd: Path, config: Config, args: argparse.Namespace = None):
         super().__init__()
         self.state = state
         self.client = client
         self.github_client = github_client
         self.cwd = cwd
         self.config = config
+        self.args = args
         self.show_all = False
         self._spinner_msg = ""
         self._jules_logger = logging.getLogger("jules_agent")
+        self.overrides = argparse.Namespace(
+            tool=None,
+            tool_bin=None,
+            plan_tool=None,
+            approve_tool=None,
+            feedback_tool=None,
+            review_tool=None,
+        )
 
     def _log_and_notify(self, msg: str) -> None:
         self._jules_logger.info(msg)
@@ -427,6 +530,14 @@ class JulesTUI(App):
         mode = "all" if self.show_all else "in-progress only"
         self.notify(f"Filter toggled: showing {mode}")
 
+    def action_settings(self) -> None:
+        def apply(result: argparse.Namespace | None):
+            if result is not None:
+                self.overrides = result
+                self.notify("Session settings updated")
+        args = getattr(self, 'args', None)
+        self.push_screen(SettingsModal(self.overrides, self.config, args), apply)
+
     def action_run_task(self) -> None:
         def start_run(description: str):
             if not description:
@@ -491,7 +602,7 @@ class JulesTUI(App):
                     def capture_plan(plan: ExecutionPlan):
                         current_plan[0] = plan
 
-                    tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", self.config)
+                    tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("plan", self.config, self.overrides)
                     automation_mode = self.config.automation_mode or "AUTO_CREATE_PR"
 
                     options = RunOptions(
@@ -616,8 +727,14 @@ class JulesTUI(App):
 
         def do_review():
             with spinner("Reviewing..."):
+                tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase("review", self.config, self.overrides)
                 service = ReviewService(self.state, self.client, self.github_client, self.cwd)
-                options = ReviewOptions(task=task)
+                options = ReviewOptions(
+                    task=task,
+                    tool_name=tool_name,
+                    tool_bin=tool_bin,
+                    gemini_skip_trust=gemini_skip_trust,
+                )
                 result = service.execute(options)
                 if result.success:
                     self.notify("Review completed")
@@ -736,7 +853,7 @@ class JulesTUI(App):
 
         self.push_screen(ConfirmModal(f"Delete task {task.id}?"), on_confirm)
 
-def start_tui(state: State, client: JulesClient, github_client: GitHubClient | None, cwd: Path, config: Config) -> int:
-    app = JulesTUI(state, client, github_client, cwd, config)
+def start_tui(state: State, client: JulesClient, github_client: GitHubClient | None, cwd: Path, config: Config, args: argparse.Namespace = None) -> int:
+    app = JulesTUI(state, client, github_client, cwd, config, args)
     app.run()
     return 0

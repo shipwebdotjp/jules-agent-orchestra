@@ -16,3 +16,4 @@ coverage.xml
 document/archive/
 .omo/
 .cptr
+.env.github.secrets

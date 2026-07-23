@@ -401,7 +401,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command is None:
             from .tui import start_tui
-            return start_tui(state, client, github_client, cwd, config)
+            return start_tui(state, client, github_client, cwd, config, args)
 
         if args.command == "run":
             return handle_run(args, state, client, cwd, config)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,7 +79,10 @@ def load_config(config_path: Path | None = None) -> Config:
                 with path.open("rb") as f:
                     data = tomllib.load(f)
                     config_data.update(data)
-            except (tomllib.TOMLDecodeError, OSError):
+            except tomllib.TOMLDecodeError as e:
+                print(f"Warning: Failed to parse {path}: {e}", file=sys.stderr)
+                continue
+            except OSError:
                 continue
 
     return Config.from_dict(config_data)

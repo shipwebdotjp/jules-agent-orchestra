@@ -18,6 +18,7 @@ from .codex import (
 logger = logging.getLogger("jules_agent")
 from .git import (
     CommandRunner,
+    fetch_commits,
     run_command,
 )
 from .github import GitHubClient
@@ -679,6 +680,7 @@ def perform_task_review(
 
     try:
         if tool_name.lower() == "ocr":
+            fetch_commits(cwd, base_sha, head_sha)
             result = run_ocr_review(
                 task=task,
                 base_sha=base_sha,

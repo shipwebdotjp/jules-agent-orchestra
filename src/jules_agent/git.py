@@ -70,6 +70,36 @@ def get_git_branch(cwd: Path) -> str:
     return "main"
 
 
+def sha_exists(cwd: Path, sha: str) -> bool:
+    completed = subprocess.run(
+        ["git", "cat-file", "-e", sha],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
+def fetch_commits(cwd: Path, *shas: str) -> None:
+    from .codex import PipelineError
+
+    missing = [s for s in shas if not sha_exists(cwd, s)]
+    if not missing:
+        return
+    completed = subprocess.run(
+        ["git", "fetch", "origin", *missing],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise PipelineError(
+            f"Failed to fetch commit(s) from origin: {completed.stderr.strip()}"
+        )
+
+
 def get_git_remote_repo(cwd: Path) -> tuple[str, str] | None:
     try:
         completed = subprocess.run(
