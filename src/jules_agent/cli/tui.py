@@ -1,29 +1,27 @@
 from __future__ import annotations
 
 import argparse
-import datetime
 import logging
 import threading
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, ListView, ListItem, Static, Label, Button, RadioSet, RadioButton, RichLog, TextArea
-from textual.containers import Horizontal, Vertical, Container, ScrollableContainer
-from textual.screen import ModalScreen, Screen
+from textual.containers import Horizontal, Vertical, ScrollableContainer
+from textual.screen import ModalScreen
 from textual.binding import Binding
 
 from ..models import State, Run, Task, ExecutionPlan
 from ..spinner import set_status_callback, spinner
 from ..codex import resolve_tool_for_phase, SelectionCancelled, ClarificationQuestion, display_tool_name
-from ..persistence import save_state
+from ..pipeline import suggest_reply
 from ..client import JulesClient
 from ..github import GitHubClient
 from ..config import Config
 
 from ..services.sync_service import SyncService, SyncOptions
 from ..services.approve_service import ApproveService, ApproveOptions
-from ..services.feedback_service import FeedbackService, FeedbackOptions
 from ..services.review_service import ReviewService, ReviewOptions
 from ..services.review_pass_service import ReviewPassService, ReviewPassOptions
 from ..services.send_service import SendService, SendOptions
@@ -32,6 +30,7 @@ from ..services.next_service import NextService, NextOptions
 from ..services.retry_service import RetryService, RetryOptions
 from ..services.delete_service import DeleteService, DeleteOptions
 from ..services.run_service import RunService, RunOptions
+from ..services.state_utils import sync_task
 
 
 class TUILogHandler(logging.Handler):
@@ -151,7 +150,7 @@ class ClarificationModal(ModalScreen[str]):
             if rs.pressed_index >= 0:
                 self.dismiss(self.question_data.options[rs.pressed_index])
             else:
-                self.notify("Please select an option", variant="error")
+                self.notify("Please select an option", severity="error")
         else:
             self.dismiss("__CANCEL__")
 
@@ -283,6 +282,41 @@ class SettingsModal(ModalScreen[argparse.Namespace | None]):
             self.dismiss(None)
 
 
+class FeedbackSuggestionModal(ModalScreen[str | None]):
+    def __init__(self, tool_label: str, explanation: str, suggestion: str, is_awaiting_plan_approval: bool,
+                 approval_recommended: bool):
+        super().__init__()
+        self.tool_label = tool_label
+        self.explanation = explanation
+        self.suggestion = suggestion
+        self.is_awaiting_plan_approval = is_awaiting_plan_approval
+        self.approval_recommended = approval_recommended
+
+    def compose(self) -> ComposeResult:
+        send_label = "Approve Plan" if (self.is_awaiting_plan_approval and self.approval_recommended) else "Send"
+        parts: list[Any] = [Label(f"Suggestion from {self.tool_label}")]
+        parts.append(Static(f"Explanation: {self.explanation}"))
+        if self.is_awaiting_plan_approval:
+            rec = "YES" if self.approval_recommended else "NO"
+            parts.append(Label(f"Approval recommended: {rec}"))
+        parts.append(Label("Suggested message (editable before sending):"))
+        parts.append(TextArea(self.suggestion, id="suggestion_input", tab_behavior="focus"))
+        parts.append(Horizontal(
+            Button(send_label, variant="primary", id="submit"),
+            Button("Cancel", variant="error", id="cancel"),
+        ))
+        yield ScrollableContainer(*parts, id="modal_container_large")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "submit":
+            self.dismiss(self.query_one("#suggestion_input", TextArea).text.strip() or None)
+        else:
+            self.dismiss(None)
+
+    def on_mount(self) -> None:
+        self.query_one("#suggestion_input").focus()
+
+
 class JulesTUI(App):
     CSS = """
     #outer_container {
@@ -334,9 +368,13 @@ class JulesTUI(App):
         padding: 1;
     }
 
-    #modal_input, #feedback_input {
+    #modal_input, #feedback_input, #suggestion_input {
         height: 5;
         border: solid $accent;
+    }
+
+    #suggestion_input {
+        height: 10;
     }
 
     #tool_bin {
@@ -635,7 +673,7 @@ class JulesTUI(App):
                     except SelectionCancelled:
                         self.notify("Plan creation cancelled")
                     except Exception as e:
-                        self.notify(f"Error creating plan: {e}", variant="error")
+                        self.notify(f"Error creating plan: {e}", severity="error")
 
                     self.call_from_thread(self.refresh_list)
 
@@ -673,34 +711,82 @@ class JulesTUI(App):
         run, task = self.get_selected_task()
         if not run or not task:
             return
-
         if not task.jules:
             self.notify("Error: Task has not been dispatched yet.", severity="error")
             return
 
-        def get_feedback(feedback: str):
-            if feedback:
-                def do_feedback():
-                    with spinner("Sending feedback..."):
-                        # We use SendService to handle the direct message part of feedback
-                        # because FeedbackService is designed for the interactive CLI loop.
-                        service = SendService(self.state, self.client, self.cwd)
-                        options = SendOptions(
-                            run=run,
-                            task=task,
-                            message=feedback,
-                            task_id_for_print=f"{run.id}:{task.id}"
-                        )
-                        result = service.execute(options)
-                        if result.success:
-                            self.notify("Feedback sent")
-                        else:
-                            self.notify(result.message or "Failed to send feedback", severity="error")
-                        self.call_from_thread(self.refresh_list)
+        task_id_for_print = f"{run.id}:{task.id}"
 
-                self.run_worker(do_feedback, thread=True)
+        def do_fetch() -> None:
+            if not sync_task(self.client, task):
+                self.notify("Failed to sync task state", severity="error")
+                self.call_from_thread(self.refresh_list)
+                return
 
-        self.push_screen(TextInputModal("Enter feedback for Jules:"), get_feedback)
+            is_awaiting_plan_approval = task.status == "awaiting_plan_approval"
+            phase = "approve" if is_awaiting_plan_approval else "feedback"
+            tool_name, tool_bin, gemini_skip_trust = resolve_tool_for_phase(phase, self.config, self._merged_args())
+            tool_label = display_tool_name(tool_name)
+
+            with spinner(f"Fetching suggestion from {tool_label}..."):
+                try:
+                    activities = list(self.client.list_activities(task.jules.session_name))
+                    result = suggest_reply(
+                        task.prompt or task.title,
+                        activities,
+                        [],
+                        cwd=self.cwd,
+                        is_awaiting_plan_approval=is_awaiting_plan_approval,
+                        tool_name=tool_name,
+                        tool_bin=tool_bin,
+                        gemini_skip_trust=gemini_skip_trust,
+                    )
+                except Exception as e:
+                    self.notify(f"Error fetching suggestion: {e}", severity="error")
+                    self.call_from_thread(self.refresh_list)
+                    return
+
+            suggestion = result["suggestion"]
+            explanation = result["explanation"]
+            approval_recommended = result.get("approval_recommended", False)
+
+            def on_result(val: str | None) -> None:
+                if not val:
+                    return
+                self._send_feedback(run, task, val, is_awaiting_plan_approval, approval_recommended, task_id_for_print)
+
+            self.call_from_thread(
+                self.push_screen,
+                FeedbackSuggestionModal(tool_label, explanation, suggestion, is_awaiting_plan_approval,
+                                        approval_recommended),
+                on_result,
+            )
+
+        self.run_worker(do_fetch, thread=True)
+
+    def _send_feedback(self, run: Run, task: Task, message: str, is_awaiting_plan_approval: bool,
+                       approval_recommended: bool, task_id_for_print: str) -> None:
+        def do_send() -> None:
+            if is_awaiting_plan_approval and approval_recommended:
+                with spinner("Approving plan..."):
+                    service = ApproveService(self.state, self.client, self.cwd)
+                    options = ApproveOptions(run=run, task=task, task_id_for_print=task_id_for_print)
+                    result = service.execute(options)
+                label = "Plan approved"
+            else:
+                with spinner("Sending message to Jules..."):
+                    service = SendService(self.state, self.client, self.cwd)
+                    options = SendOptions(run=run, task=task, message=message, task_id_for_print=task_id_for_print)
+                    result = service.execute(options)
+                label = "Feedback sent"
+
+            if result.success:
+                self.notify(label)
+            else:
+                self.notify(result.message or "Failed", severity="error")
+            self.call_from_thread(self.refresh_list)
+
+        self.run_worker(do_send, thread=True)
 
     def action_send_msg(self) -> None:
         run, task = self.get_selected_task()

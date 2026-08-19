@@ -70,7 +70,7 @@ The TUI includes a log pane at the bottom to monitor real-time activities and HT
 Supported keyboard shortcuts in the TUI:
 - `s`: Sync with Jules and GitHub
 - `a`: Approve plans
-- `f`: Provide feedback
+- `f`: Fetch AI suggestion, edit, and send feedback
 - `v`: Run reviews
 - `P`: Manually mark as review passed
 - `m`: Merge PRs

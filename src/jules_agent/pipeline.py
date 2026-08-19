@@ -737,6 +737,25 @@ def perform_task_review(
                 tool_bin=tool_bin,
                 gemini_skip_trust=gemini_skip_trust,
             )
+
+        logger.info(f"Review completed for task {task.id}. Status: {result['status']}")
+
+        # Update sticky comment
+        body = format_review_sticky_comment(
+            task=task,
+            status=result["status"],
+            attempt=task.attempts + 1,
+            head_sha=head_sha,
+            summary=result["summary"],
+            next_steps=result["next_steps"],
+            findings=result.get("findings"),
+            tool_label=tool_label,
+        )
+        update_sticky_comment(github_client, repo, issue_number, body, task)
+
+        # Apply results to task state
+        apply_review_result(task, result, head_sha, github_client, repo, issue_number, cwd)
+        save_state(cwd, state)
     except Exception as e:
         # Post error sticky comment
         error_body = format_review_sticky_comment(
@@ -753,22 +772,3 @@ def perform_task_review(
         task.status = prev_status
         save_state(cwd, state)
         raise PipelineError(f"{tool_label} review failed: {e}") from e
-
-    logger.info(f"Review completed for task {task.id}. Status: {result['status']}")
-
-    # Update sticky comment
-    body = format_review_sticky_comment(
-        task=task,
-        status=result["status"],
-        attempt=task.attempts + 1,
-        head_sha=head_sha,
-        summary=result["summary"],
-        next_steps=result["next_steps"],
-        findings=result.get("findings"),
-        tool_label=tool_label,
-    )
-    update_sticky_comment(github_client, repo, issue_number, body, task)
-
-    # Apply results to task state
-    apply_review_result(task, result, head_sha, github_client, repo, issue_number, cwd)
-    save_state(cwd, state)

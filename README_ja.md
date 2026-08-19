@@ -70,7 +70,7 @@ TUI の下半分にはログペインがあり、リアルタイムの動作状�
 TUI で利用可能なキーボードショートカット:
 - `s`: Jules および GitHub と同期 (Sync)
 - `a`: 計画の承認 (Approve)
-- `f`: フィードバックの送信 (Feedback)
+- `f`: AIの提案を取得・編集してフィードバックを送信 (Feedback)
 - `v`: レビューの実行 (Review)
 - `P`: 手動でレビュー合格にする (Review Pass)
 - `m`: PR のマージ (Merge)

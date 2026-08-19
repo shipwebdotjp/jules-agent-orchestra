@@ -63,6 +63,16 @@ class GitHubClient:
             )
         return response.json()
 
+    def delete_issue_comment(self, repo: str, comment_id: int) -> None:
+        path = f"/repos/{repo}/issues/comments/{comment_id}"
+        response = self._request("DELETE", path)
+        if response.status_code != 204:
+            raise GitHubAPIError(
+                f"Failed to delete comment: {response.text}",
+                status_code=response.status_code,
+                response_body=response.text,
+            )
+
     def get_pull_request(self, repo: str, pull_number: int) -> dict[str, Any]:
         path = f"/repos/{repo}/pulls/{pull_number}"
         response = self._request("GET", path)

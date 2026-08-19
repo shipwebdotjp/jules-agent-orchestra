@@ -126,6 +126,11 @@ def update_sticky_comment(
             return
         except Exception as e:
             logger.warning(f"Failed to update existing sticky comment: {e}")
+            # Delete orphaned comment before creating replacement
+            try:
+                github_client.delete_issue_comment(repo, task.review.sticky_comment_id)
+            except Exception:
+                logger.warning("Failed to delete old sticky comment")
 
     # Create new comment
     try:
